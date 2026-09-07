@@ -5,6 +5,7 @@ import org.luminal.openapi.sdk.internal.JsonSupport;
 import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
 import org.luminal.openapi.sdk.model.SharedAccountModels.CreateSharedAccountRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountBalanceRequest;
+import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountCancelRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountGetRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountIdResponse;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountPageRequest;
@@ -69,6 +70,16 @@ public final class SharedAccountsApi {
      */
     public SharedAccountTransactionIdResponse decrease(SharedAccountBalanceRequest request) {
         return post("/decrease", request, SharedAccountTransactionIdResponse.class);
+    }
+
+    /**
+     * Cancels a shared account after the server accepts the supplied verification code.
+     *
+     * @param request shared-account identifier, optional remark, and email/OTP verification code
+     * @return {@code true} when the server reports a successful cancellation
+     */
+    public boolean cancel(SharedAccountCancelRequest request) {
+        return transport.postAuthorizedBoolean(PATH + "/cancel", Objects.requireNonNull(request, "request"));
     }
 
     /**

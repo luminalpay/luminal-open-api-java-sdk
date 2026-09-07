@@ -15,6 +15,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * Shared, immutable-after-configuration JSON support for SDK wire data.
@@ -50,6 +51,7 @@ public final class JsonSupport {
     private static JavaTimeModule javaTimeModule() {
         JavaTimeModule module = new JavaTimeModule();
         module.addDeserializer(LocalDateTime.class, new EpochMillisLocalDateTimeDeserializer());
+        module.addDeserializer(ZonedDateTime.class, new EpochMillisZonedDateTimeDeserializer());
         return module;
     }
 

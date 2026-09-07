@@ -12,6 +12,98 @@ public final class OpenApiEnums {
     }
 
     /**
+     * OAuth2 permission scopes supported by Luminal Open API.
+     *
+     * <p>The enum constant is a readable SDK name; call {@link #code()} when sending or comparing the
+     * space-delimited scope value returned by the authorization API.</p>
+     */
+    public enum OpenApiScope {
+        /**
+         * Read account details.
+         */
+        ACCOUNT_READ("openapi:account:read"),
+        /**
+         * Read card BINs, transaction records, and operation records.
+         */
+        CARD_READ("openapi:card:read"),
+        /**
+         * Apply for cards.
+         */
+        CARD_ISSUE("openapi:card:issue"),
+        /**
+         * Freeze or unfreeze cards.
+         */
+        CARD_FREEZE("openapi:card:freeze"),
+        /**
+         * Cancel cards.
+         */
+        CARD_CANCEL("openapi:card:cancel"),
+        /**
+         * Modify card limits.
+         */
+        CARD_LIMIT_WRITE("openapi:card:limit:write"),
+        /**
+         * Read detailed card information.
+         */
+        CARD_DETAIL_READ("openapi:card:detail:read"),
+        /**
+         * Read card groups.
+         */
+        CARD_GROUP_READ("openapi:card-group:read"),
+        /**
+         * Edit card groups.
+         */
+        CARD_GROUP_WRITE("openapi:card-group:write"),
+        /**
+         * Apply for rechargeable cards.
+         */
+        RECHARGE_CARD_ISSUE("openapi:recharge-card:issue"),
+        /**
+         * Recharge a rechargeable card.
+         */
+        RECHARGE_CARD_RECHARGE("openapi:recharge-card:recharge"),
+        /**
+         * Withdraw funds from a rechargeable card.
+         */
+        RECHARGE_CARD_WITHDRAW("openapi:recharge-card:withdraw"),
+        /**
+         * Read shared-account details and fund records.
+         */
+        SHARED_ACCOUNT_READ("openapi:shared-account:read"),
+        /**
+         * Create shared accounts.
+         */
+        SHARED_ACCOUNT_CREATE("openapi:shared-account:create"),
+        /**
+         * Deposit funds into shared accounts.
+         */
+        SHARED_ACCOUNT_DEPOSIT("openapi:shared-account:deposit"),
+        /**
+         * Withdraw funds from shared accounts.
+         */
+        SHARED_ACCOUNT_WITHDRAW("openapi:shared-account:withdraw"),
+        /**
+         * Cancel shared accounts.
+         */
+        SHARED_ACCOUNT_CANCEL("openapi:shared-account:cancel");
+
+        private final String code;
+
+        OpenApiScope(String code) {
+            this.code = code;
+        }
+
+        /**
+         * Returns the OAuth2 scope wire value.
+         *
+         * @return scope value used by the Open API authorization service
+         */
+        public String code() {
+            return code;
+        }
+    }
+
+    /**
      * Supported wallet and transaction currencies. The enum name is the API wire value.
      */
     public enum CurrencyCode {
@@ -291,6 +383,28 @@ public final class OpenApiEnums {
     }
 
     /**
+     * Local settlement status carried by transaction webhooks. The enum name is the API wire value.
+     */
+    public enum SettleStatus {
+        /**
+         * Settlement is complete.
+         */
+        SETTLED,
+        /**
+         * Settlement is being processed.
+         */
+        PROCESSING,
+        /**
+         * Settlement is waiting to be processed.
+         */
+        PENDING,
+        /**
+         * Settlement is not required.
+         */
+        NOT_SETTLE
+    }
+
+    /**
      * Card transaction classification. The enum name is the API wire value.
      */
     public enum MemberTradeType {
@@ -369,6 +483,46 @@ public final class OpenApiEnums {
         SUCCESS,
         /**
          * Processing failed; final status.
+         */
+        FAIL
+    }
+
+    /**
+     * Recharge-card operation type returned by operation records and webhooks.
+     */
+    public enum RechargeCardOperationType {
+        /**
+         * Recharge funds to a card.
+         */
+        RECHARGE,
+        /**
+         * Withdraw funds from a card.
+         */
+        WITHDRAW,
+        /**
+         * Modify card limits.
+         */
+        MODIFY_LIMITS
+    }
+
+    /**
+     * Recharge-card operation result status returned by operation records and webhooks.
+     */
+    public enum RechargeCardOperationStatus {
+        /**
+         * The operation is waiting to be processed.
+         */
+        PENDING,
+        /**
+         * The operation is being processed.
+         */
+        PROCESSING,
+        /**
+         * The operation completed successfully.
+         */
+        SUCCESS,
+        /**
+         * The operation failed.
          */
         FAIL
     }

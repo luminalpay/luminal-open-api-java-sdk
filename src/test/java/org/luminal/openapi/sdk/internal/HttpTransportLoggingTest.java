@@ -85,6 +85,7 @@ class HttpTransportLoggingTest {
                         "cvv", "456",
                         "cardNo", "4111111111111111",
                         "CardNumber", "5555555555554444",
+                        "verifyCode", "otp-secret",
                         "safe", "visible-request")));
         Map<String, String> requestHeaders = Map.of(
                 "Authorization", "Basic authorization-secret",
@@ -116,7 +117,7 @@ class HttpTransportLoggingTest {
         assertTrue(logs.contains("<redacted>"), logs);
         for (String secret : List.of("authorization-secret", "cookie-secret", "set-cookie-secret", "sign-secret",
                 "request-access-secret", "request-refresh-secret", "request-app-secret", "4111111111111111",
-                "5555555555554444", "response-refresh-secret", "\"123\"", "\"456\"")) {
+                "5555555555554444", "otp-secret", "response-refresh-secret", "\"123\"", "\"456\"")) {
             assertFalse(logs.contains(secret), logs);
         }
     }

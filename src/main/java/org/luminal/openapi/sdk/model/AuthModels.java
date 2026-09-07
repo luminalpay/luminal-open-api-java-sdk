@@ -15,7 +15,7 @@ public final class AuthModels {
      * @param tokenType    OAuth2 token type, usually {@code Bearer}
      * @param expiresTime  access-token expiration instant as Unix epoch milliseconds
      * @param refreshToken token used to obtain new access-token data
-     * @param scope        space-delimited granted OAuth2 scopes
+     * @param scope        space-delimited granted OAuth2 scopes; see {@link OpenApiEnums.OpenApiScope#code()}
      * @param jti          unique token identifier
      */
     public record OAuth2Token(

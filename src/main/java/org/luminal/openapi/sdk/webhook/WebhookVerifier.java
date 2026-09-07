@@ -6,6 +6,7 @@ import org.luminal.openapi.sdk.model.WebhookModels.CardOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.CardStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.SharedAccountOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.TransactionWebhook;
+import org.luminal.openapi.sdk.model.WebhookModels.RechargeCardTransferStatusWebhook;
 
 import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
@@ -82,8 +83,11 @@ public final class WebhookVerifier {
         Object payload = switch (type) {
             case CARD_OPEN_STATUS -> read(rawBody, CardOpenStatusWebhook.class);
             case CARD_STATUS -> read(rawBody, CardStatusWebhook.class);
+            case CARD_RECHARGE_STATUS, CARD_WITHDRAW_STATUS, CARD_LIMIT_STATUS ->
+                    read(rawBody, RechargeCardTransferStatusWebhook.class);
             case SHARED_ACCOUNT_OPEN_STATUS -> read(rawBody, SharedAccountOpenStatusWebhook.class);
-            case CARD_TRANSACTIONS, SHARE_ACCOUNT_FUND_TRANSACTIONS -> read(rawBody, TransactionWebhook.class);
+            case CARD_TRANSACTIONS, CARD_SETTLE_STATUS, SHARE_ACCOUNT_FUND_TRANSACTIONS ->
+                    read(rawBody, TransactionWebhook.class);
         };
         return new WebhookEvent<>(type, eventId, rawBody, signature, payload);
     }

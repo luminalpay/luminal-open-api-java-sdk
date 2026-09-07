@@ -66,6 +66,14 @@ public abstract class ApiTestSupport {
         }
     }
 
+    protected void assertBearerGet(String expectedPath) throws Exception {
+        CapturedRequest request = request();
+        assertEquals("GET", request.method());
+        assertEquals(expectedPath, request.path());
+        assertEquals("Bearer test-token", request.header("Authorization"));
+        assertEquals("", request.body());
+    }
+
     static String success(String dataJson) {
         return "{\"code\":0,\"msg\":\"success\",\"data\":" + dataJson + '}';
     }

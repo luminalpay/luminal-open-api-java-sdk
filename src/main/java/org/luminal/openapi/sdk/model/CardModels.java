@@ -1,5 +1,7 @@
 package org.luminal.openapi.sdk.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,7 +15,7 @@ public final class CardModels {
     }
 
     /**
-     * Card BIN list filters. The current API supports the {@code SHARED} card type.
+     * Card BIN list filters. The current API supports the {@code SHARED} and {@code RECHARGE} card types.
      *
      * @param pageNo           one-based page number; the server default is {@code 1}
      * @param pageSize         number of records requested per page; the server default is {@code 10}
@@ -41,6 +43,8 @@ public final class CardModels {
      * @param cardBin             card BIN digits
      * @param cardOrganization    card network or organization; see {@link OpenApiEnums.CardOrganization}
      * @param applicableScenarios description of supported usage scenarios
+     * @param customCardholder    whether the BIN supports an explicit cardholder on issuance; {@code 1} means yes
+     * @param canLimit            whether the BIN supports card-limit configuration; {@code 1} means yes
      */
     public record CardBinResponse(
             Long cardBinId,
@@ -49,7 +53,15 @@ public final class CardModels {
             String areaCode,
             String cardBin,
             String cardOrganization,
-            String applicableScenarios) {
+            String applicableScenarios,
+            Integer customCardholder,
+            Integer canLimit) {
+        @SuppressWarnings("unused")
+        public CardBinResponse(Long cardBinId, String cardType, String currencyCode, String areaCode,
+                String cardBin, String cardOrganization, String applicableScenarios) {
+            this(cardBinId, cardType, currencyCode, areaCode, cardBin, cardOrganization,
+                    applicableScenarios, null, null);
+        }
     }
 
     /**
@@ -60,9 +72,11 @@ public final class CardModels {
      * @param cardGroupId           required card-group identifier matching the selected card type
      * @param cardName              user-visible card name
      * @param cardType              required card product type; see {@link OpenApiEnums.CardType}
-     * @param memberSharedAccountId required shared account funding the card
+     * @param memberSharedAccountId shared account funding a {@code SHARED} card; omitted for {@code RECHARGE}
+     * @param dailyLimit            daily spending limit used only for {@link OpenApiEnums.CardType#RECHARGE}
      * @param monthLimit            monthly spending limit used only for {@link OpenApiEnums.CardType#RECHARGE}
      * @param rechargeAmount        initial funding amount for {@code RECHARGE}, or total limit for {@code SHARED}
+     * @param cardHolderId          optional cardholder identifier; pass it only when the selected BIN supports it
      */
     public record IssueCardRequest(
             Integer applyCount,
@@ -71,8 +85,95 @@ public final class CardModels {
             String cardName,
             String cardType,
             Long memberSharedAccountId,
+            BigDecimal dailyLimit,
             BigDecimal monthLimit,
-            BigDecimal rechargeAmount) {
+            BigDecimal rechargeAmount,
+            Long cardHolderId) {
+        /**
+         * Backward-compatible constructor for SDK clients created before daily recharge-card limits were exposed.
+         */
+        public IssueCardRequest(
+                Integer applyCount,
+                Long cardBinId,
+                Long cardGroupId,
+                String cardName,
+                String cardType,
+                Long memberSharedAccountId,
+                BigDecimal monthLimit,
+                BigDecimal rechargeAmount) {
+            this(applyCount, cardBinId, cardGroupId, cardName, cardType, memberSharedAccountId,
+                    null, monthLimit, rechargeAmount, null);
+        }
+
+        public IssueCardRequest(Integer applyCount, Long cardBinId, Long cardGroupId, String cardName,
+                String cardType, Long memberSharedAccountId, BigDecimal dailyLimit,
+                BigDecimal monthLimit, BigDecimal rechargeAmount) {
+            this(applyCount, cardBinId, cardGroupId, cardName, cardType, memberSharedAccountId,
+                    dailyLimit, monthLimit, rechargeAmount, null);
+        }
+    }
+
+    /**
+     * Recharge-card funding parameters.
+     */
+    public record MemberCardRechargeRequest(Long memberCardId, BigDecimal amount, String remark) {
+    }
+
+    /**
+     * Recharge-card withdrawal parameters.
+     */
+    public record MemberCardWithdrawRequest(Long memberCardId, BigDecimal amount, String remark) {
+    }
+
+    /**
+     * Recharge-card operation-record lookup parameters.
+     */
+    public record RechargeCardOperationRecordRequest(
+            Integer pageNo,
+            Integer pageSize,
+            Long memberCardOperationRecordId,
+            Long memberCardId) {
+        public RechargeCardOperationRecordRequest {
+            if (memberCardOperationRecordId == null && memberCardId == null) {
+                throw new IllegalArgumentException(
+                        "memberCardOperationRecordId and memberCardId cannot both be null");
+            }
+        }
+
+        public RechargeCardOperationRecordRequest(Long memberCardOperationRecordId) {
+            this(1, 10, memberCardOperationRecordId, null);
+        }
+    }
+
+    /**
+     * Result of a recharge-card funding, withdrawal, or limit-modification operation.
+     *
+     * <p>{@code createTime} and {@code updateTime} are Unix epoch timestamps in milliseconds.</p>
+     *
+     * @param memberCardOperationRecordId operation-record identifier
+     * @param memberCardId                member-card identifier
+     * @param cardType                    card product type; see {@link OpenApiEnums.CardType}
+     * @param operationType               operation type; see {@link OpenApiEnums.RechargeCardOperationType}
+     * @param amount                      operation amount, when applicable
+     * @param currencyCode                operation currency; see {@link OpenApiEnums.CurrencyCode}
+     * @param balance                     card balance after the operation
+     * @param status                      operation result; see {@link OpenApiEnums.RechargeCardOperationStatus}
+     * @param message                     operation result message
+     * @param createTime                  creation time as a Unix epoch timestamp in milliseconds
+     * @param updateTime                  last-update time as a Unix epoch timestamp in milliseconds
+     */
+    public record RechargeCardOperationRecordResponse(
+            Long memberCardOperationRecordId,
+            Long memberCardId,
+            String cardType,
+            String operationType,
+            BigDecimal amount,
+            String currencyCode,
+            BigDecimal balance,
+            String status,
+            String message,
+            Long createTime,
+            Long updateTime) {
     }
 
     /**
@@ -96,7 +197,7 @@ public final class CardModels {
             String cardBin,
             String cardType,
             String cardKeyWords,
-             List<Long> cardGroups) {
+            List<Long> cardGroups) {
         public MemberCardPageRequest {
             cardGroups = cardGroups == null ? null : List.copyOf(cardGroups);
         }
@@ -135,6 +236,9 @@ public final class CardModels {
             String currencyCode,
             BigDecimal balance,
             BigDecimal totalLimit,
+            BigDecimal dailyLimit,
+            BigDecimal monthLimit,
+            Integer canLimit,
             String status,
             String cardholder,
             LocalDateTime freezeTime,
@@ -193,6 +297,7 @@ public final class CardModels {
     /**
      * Card-transaction information.
      *
+     * @param memberCardTransactionId    recharge-card transaction identifier
      * @param sharedAccountTransactionId shared-account transaction identifier
      * @param memberSharedAccountId      related shared-account identifier
      * @param memberCardId               related member-card identifier
@@ -204,6 +309,8 @@ public final class CardModels {
      * @param beforeBalance              card balance before the transaction
      * @param beforeAccountBalance       shared-account balance before the transaction
      * @param status                     transaction status; see {@link OpenApiEnums.TradeStatus}
+     * @param settleStatus               local settlement status; see {@link OpenApiEnums.SettleStatus}
+     * @param settleTime                 local settlement time; absent when the transaction is not settled
      * @param type                       public transaction type name; see {@link OpenApiEnums.SharedAccountTransactionType}
      * @param tradeType                  card transaction classification; see {@link OpenApiEnums.MemberTradeType}
      * @param direction                  balance direction code; see {@link OpenApiEnums.TransactionDirection}
@@ -223,6 +330,7 @@ public final class CardModels {
      *                                   {@code SUCCESS} and {@code FAIL}
      */
     public record CardTransactionResponse(
+            Long memberCardTransactionId,
             Long sharedAccountTransactionId,
             Long memberSharedAccountId,
             Long memberCardId,
@@ -234,6 +342,8 @@ public final class CardModels {
             BigDecimal beforeBalance,
             BigDecimal beforeAccountBalance,
             String status,
+            String settleStatus,
+            LocalDateTime settleTime,
             String type,
             String tradeType,
             Integer direction,
@@ -250,6 +360,43 @@ public final class CardModels {
             String merchantCity,
             String merchantMcc,
             String processStatus) {
+        /**
+         * Backward-compatible constructor for the original shared-card response shape.
+         */
+        public CardTransactionResponse(
+                Long sharedAccountTransactionId,
+                Long memberSharedAccountId,
+                Long memberCardId,
+                String maskCardNo,
+                String orderNo,
+                String originalOrderNo,
+                BigDecimal accountBalance,
+                BigDecimal balance,
+                BigDecimal beforeBalance,
+                BigDecimal beforeAccountBalance,
+                String status,
+                String type,
+                String tradeType,
+                Integer direction,
+                String description,
+                BigDecimal tradeActualAmount,
+                String currencyCode,
+                String tradeCurrencyCode,
+                BigDecimal tradeAmount,
+                LocalDateTime tradeTime,
+                String merchantName,
+                String merchantId,
+                String merchantCountry,
+                String cardBin,
+                String merchantCity,
+                String merchantMcc,
+                String processStatus) {
+            this(null, sharedAccountTransactionId, memberSharedAccountId, memberCardId, maskCardNo,
+                    orderNo, originalOrderNo, accountBalance, balance, beforeBalance, beforeAccountBalance,
+                    status, null, null, type, tradeType, direction, description, tradeActualAmount, currencyCode,
+                    tradeCurrencyCode, tradeAmount, tradeTime, merchantName, merchantId, merchantCountry,
+                    cardBin, merchantCity, merchantMcc, processStatus);
+        }
     }
 
     /**
@@ -263,12 +410,32 @@ public final class CardModels {
     }
 
     /**
-     * Card-limit update parameters.
+     * Card-limit update parameters. The server infers the card type from the member-card identifier;
+     * {@code cardType} is retained only for source compatibility with earlier SDK snapshots and is never sent.
      *
      * @param memberCardId target member-card identifier
-     * @param totalLimit   new total card limit
+     * @param cardType     legacy card-type argument, ignored on the wire
+     * @param dailyLimit   new daily limit for recharge cards
+     * @param monthLimit   new monthly limit for recharge cards
+     * @param totalLimit   new total limit for shared cards
      */
-    public record CardLimitUpdateRequest(Long memberCardId, BigDecimal totalLimit) {
+    public record CardLimitUpdateRequest(
+            Long memberCardId,
+            @JsonIgnore String cardType,
+            BigDecimal dailyLimit,
+            BigDecimal monthLimit,
+            BigDecimal totalLimit) {
+        /**
+         * Creates a request using the current server contract without a card-type argument.
+         */
+        public CardLimitUpdateRequest(Long memberCardId, BigDecimal dailyLimit,
+                BigDecimal monthLimit, BigDecimal totalLimit) {
+            this(memberCardId, null, dailyLimit, monthLimit, totalLimit);
+        }
+
+        public CardLimitUpdateRequest(Long memberCardId, BigDecimal totalLimit) {
+            this(memberCardId, null, null, null, totalLimit);
+        }
     }
 
     /**

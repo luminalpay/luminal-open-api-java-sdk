@@ -16,6 +16,10 @@ import org.luminal.openapi.sdk.model.CardModels.IssueCardDetailsResponse;
 import org.luminal.openapi.sdk.model.CardModels.IssueCardRequest;
 import org.luminal.openapi.sdk.model.CardModels.MemberCardPageRequest;
 import org.luminal.openapi.sdk.model.CardModels.MemberCardResponse;
+import org.luminal.openapi.sdk.model.CardModels.MemberCardRechargeRequest;
+import org.luminal.openapi.sdk.model.CardModels.MemberCardWithdrawRequest;
+import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordRequest;
+import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordResponse;
 import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
 
 import java.security.PrivateKey;
@@ -127,6 +131,13 @@ public final class CardsApi {
     }
 
     /**
+     * Updates a card limit asynchronously and returns the operation-record identifier used by queries and webhooks.
+     */
+    public Long modifyLimitAsync(CardLimitUpdateRequest request) {
+        return post("/limit/modify/operation-record", request, Long.class);
+    }
+
+    /**
      * Freezes a card.
      *
      * @param request target member-card identifier
@@ -154,6 +165,40 @@ public final class CardsApi {
      */
     public boolean cancel(CardIdRequest request) {
         return action("/cancel", request);
+    }
+
+    /**
+     * Submits a recharge-card funding request.
+     *
+     * @return member-card operation-record identifier
+     */
+    public Long recharge(MemberCardRechargeRequest request) {
+        return post("/recharge", request, Long.class);
+    }
+
+    /**
+     * Submits a recharge-card withdrawal request.
+     *
+     * @return member-card operation-record identifier
+     */
+    public Long withdraw(MemberCardWithdrawRequest request) {
+        return post("/withdraw", request, Long.class);
+    }
+
+    /**
+     * Queries a card operation by its record identifier.
+     */
+    public RechargeCardOperationRecordResponse operationRecord(RechargeCardOperationRecordRequest request) {
+        PageResultEx<RechargeCardOperationRecordResponse, Object> page = operationRecords(request);
+        return page.list() == null || page.list().isEmpty() ? null : page.list().get(0);
+    }
+
+    /**
+     * Queries SHARED or RECHARGE card operation records with pagination.
+     */
+    public PageResultEx<RechargeCardOperationRecordResponse, Object> operationRecords(
+            RechargeCardOperationRecordRequest request) {
+        return page("/operation-record", request, RechargeCardOperationRecordResponse.class);
     }
 
     /**

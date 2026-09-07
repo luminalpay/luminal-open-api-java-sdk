@@ -62,9 +62,38 @@ public final class WebhookModels {
     }
 
     /**
+     * Payload of card operation-result webhooks, including recharge, withdrawal and limit modification.
+     *
+     * @param memberCardOperationRecordId operation-record identifier
+     * @param memberCardId                member-card identifier
+     * @param cardType                    card product type; see {@link OpenApiEnums.CardType}
+     * @param operationType               operation type; see {@link OpenApiEnums.RechargeCardOperationType}
+     * @param amount                      operation amount, when applicable
+     * @param currencyCode                operation currency; see {@link OpenApiEnums.CurrencyCode}
+     * @param balance                     card balance after the operation
+     * @param status                      operation result; see {@link OpenApiEnums.RechargeCardOperationStatus}
+     * @param message                     operation result message
+     * @param updateTime                  last-update time reported by the webhook
+     */
+    public record RechargeCardTransferStatusWebhook(
+            Long memberCardOperationRecordId,
+            Long memberCardId,
+            String cardType,
+            String operationType,
+            BigDecimal amount,
+            String currencyCode,
+            BigDecimal balance,
+            String status,
+            String message,
+            LocalDateTime updateTime) {
+    }
+
+    /**
      * Payload shared by the {@code CARD_TRANSACTIONS} and {@code SHARE_ACCOUNT_FUND_TRANSACTIONS} webhooks. Both
      * events use the same server message schema; fields unrelated to a specific transaction may be absent.
      *
+     * @param memberCardTransactionId    recharge-card transaction identifier
+     * @param cardType                   card product type
      * @param sharedAccountTransactionId shared-account transaction identifier
      * @param memberSharedAccountId      related shared-account identifier
      * @param memberCardId               related member-card identifier
@@ -76,6 +105,8 @@ public final class WebhookModels {
      * @param beforeBalance              card balance before the transaction
      * @param beforeAccountBalance       shared-account balance before the transaction
      * @param status                     transaction status; see {@link OpenApiEnums.TradeStatus}
+     * @param settleStatus               local settlement status; see {@link OpenApiEnums.SettleStatus}
+     * @param settleTime                 local settlement time; absent when the transaction is not settled
      * @param type                       public transaction type name; see {@link OpenApiEnums.SharedAccountTransactionType}
      * @param tradeType                  card transaction classification when applicable; see {@link OpenApiEnums.MemberTradeType}
      * @param direction                  string-encoded balance direction code; see {@link OpenApiEnums.TransactionDirection}
@@ -95,6 +126,8 @@ public final class WebhookModels {
      *                                   {@code SUCCESS} and {@code FAIL}
      */
     public record TransactionWebhook(
+            String memberCardTransactionId,
+            String cardType,
             String sharedAccountTransactionId,
             String memberSharedAccountId,
             String memberCardId,
@@ -106,6 +139,8 @@ public final class WebhookModels {
             BigDecimal beforeBalance,
             BigDecimal beforeAccountBalance,
             String status,
+            String settleStatus,
+            LocalDateTime settleTime,
             String type,
             String tradeType,
             String direction,
@@ -122,5 +157,42 @@ public final class WebhookModels {
             String merchantCity,
             String merchantMcc,
             String processStatus) {
+        /**
+         * Backward-compatible constructor for the original shared-card webhook shape.
+         */
+        public TransactionWebhook(
+                String sharedAccountTransactionId,
+                String memberSharedAccountId,
+                String memberCardId,
+                String maskCardNo,
+                String orderNo,
+                String originalOrderNo,
+                BigDecimal accountBalance,
+                BigDecimal balance,
+                BigDecimal beforeBalance,
+                BigDecimal beforeAccountBalance,
+                String status,
+                String type,
+                String tradeType,
+                String direction,
+                String description,
+                BigDecimal tradeActualAmount,
+                String currencyCode,
+                String tradeCurrencyCode,
+                BigDecimal tradeAmount,
+                LocalDateTime tradeTime,
+                String merchantName,
+                String merchantId,
+                String merchantCountry,
+                String cardBin,
+                String merchantCity,
+                String merchantMcc,
+                String processStatus) {
+            this(null, null, sharedAccountTransactionId, memberSharedAccountId, memberCardId,
+                    maskCardNo, orderNo, originalOrderNo, accountBalance, balance,
+                    beforeBalance, beforeAccountBalance, status, null, null, type, tradeType, direction, description,
+                    tradeActualAmount, currencyCode, tradeCurrencyCode, tradeAmount, tradeTime,
+                    merchantName, merchantId, merchantCountry, cardBin, merchantCity, merchantMcc, processStatus);
+        }
     }
 }

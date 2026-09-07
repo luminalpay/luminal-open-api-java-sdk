@@ -18,6 +18,11 @@ import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupCreateRequest;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupDeleteRequest;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupRequest;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupUpdateRequest;
+import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderCardPageRequest;
+import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderCountryResponse;
+import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderCreateRequest;
+import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderDetailResponse;
+import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderPageRequest;
 import org.luminal.openapi.sdk.model.CardModels.CardBinResponse;
 import org.luminal.openapi.sdk.model.CardModels.CardBinsRequest;
 import org.luminal.openapi.sdk.model.CardModels.CardIdRequest;
@@ -28,6 +33,8 @@ import org.luminal.openapi.sdk.model.CardModels.IssueCardDetailsResponse;
 import org.luminal.openapi.sdk.model.CardModels.IssueCardRequest;
 import org.luminal.openapi.sdk.model.CardModels.MemberCardPageRequest;
 import org.luminal.openapi.sdk.model.CardModels.MemberCardResponse;
+import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordRequest;
+import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordResponse;
 import org.luminal.openapi.sdk.model.CommonModels.PageResult;
 import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
 import org.luminal.openapi.sdk.model.SharedAccountModels.CreateSharedAccountRequest;
@@ -40,6 +47,7 @@ import org.luminal.openapi.sdk.model.TransactionModels.WalletTransactionRequest;
 import org.luminal.openapi.sdk.model.WebhookModels.CardOpenResult;
 import org.luminal.openapi.sdk.model.WebhookModels.CardOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.CardStatusWebhook;
+import org.luminal.openapi.sdk.model.WebhookModels.RechargeCardTransferStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.SharedAccountOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.TransactionWebhook;
 import org.luminal.openapi.sdk.webhook.WebhookEvent;
@@ -53,6 +61,8 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -68,9 +78,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestMethodOrder(OrderAnnotation.class)
-class SandboxOpenApiIntegrationTest {
+class ShareCardSandboxOpenApiIntegrationTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SandboxOpenApiIntegrationTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ShareCardSandboxOpenApiIntegrationTest.class);
     private static final String DEFAULT_BASE_URL = "https://sandbox-openapi.luminalads.com";
     private static final String DEFAULT_APP_ID = "lpsha6pj5mwsb7tz";
     private static final String DEFAULT_APP_SECRET = "P11g59PXY33JjqL4CRJ2Oz3nfsjsWRKe";
@@ -78,7 +88,7 @@ class SandboxOpenApiIntegrationTest {
     private static final String DEFAULT_WEBHOOK_HOST = "0.0.0.0";
     private static final int DEFAULT_WEBHOOK_PORT = 18081;
     private static final String DEFAULT_WEBHOOK_PATH = "/luminal-open-api-webhook";
-    private static final int WEBHOOK_QUERY_TIMEOUT_SECONDS = 120;
+    private static final int WEBHOOK_QUERY_TIMEOUT_SECONDS = 30;
     private static final int WEBHOOK_WAIT_LOG_INTERVAL_SECONDS = 10;
     private static final int MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
     private static final LuminalOpenApiClient PUBLIC_CLIENT = new LuminalOpenApiClient(configured(
@@ -92,21 +102,28 @@ class SandboxOpenApiIntegrationTest {
             new ConcurrentHashMap<>();
     private static final ConcurrentMap<Long, CompletableFuture<CardStatusWebhook>> CARD_STATUS_WEBHOOKS =
             new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Long, CompletableFuture<RechargeCardTransferStatusWebhook>> LIMIT_WEBHOOKS =
+            new ConcurrentHashMap<>();
     private static final ConcurrentMap<Long, CompletableFuture<SharedAccountOpenStatusWebhook>> SHARED_ACCOUNT_OPEN_WEBHOOKS =
             new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, CompletableFuture<TransactionWebhook>> FUND_TRANSACTION_WEBHOOKS =
             new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, TransactionWebhook> SETTLEMENT_WEBHOOKS = new ConcurrentHashMap<>();
     private static final AtomicReference<Throwable> WEBHOOK_ERROR = new AtomicReference<>();
     private static volatile OAuth2Token CACHED_TOKEN;
     private static volatile IllegalStateException CARD_OPEN_FAILURE;
     private static volatile boolean TOKEN_FLOW_READY;
     private static HttpServer WEBHOOK_SERVER;
-    private static Long CACHED_CARD_BIN_ID;
+    private static CardBinResponse CACHED_CARD_BIN;
+    private static CardHolderDetailResponse CACHED_CARD_HOLDER_TEMPLATE;
+    private static List<CardHolderCountryResponse> CACHED_CARD_HOLDER_COUNTRIES;
+    private static Long CACHED_CARD_HOLDER_ID;
     private static Long CACHED_SHARED_ACCOUNT_ID;
     private static Long CACHED_CARD_GROUP_ID;
     private static Long CACHED_DELETE_CARD_GROUP_ID;
     private static Long CACHED_CARD_TASK_ID;
     private static Long CACHED_CARD_ID;
+    private static Long CACHED_LIMIT_OPERATION_RECORD_ID;
     private static String CACHED_INCREASE_TRANSACTION_ID;
     private static String CACHED_DECREASE_TRANSACTION_ID;
     private static String CACHED_CARD_NAME;
@@ -123,11 +140,11 @@ class SandboxOpenApiIntegrationTest {
         String path = normalizeWebhookPath(configured(
                 "LUMINAL_OPEN_API_WEBHOOK_PATH", "luminal.openApi.webhookPath", DEFAULT_WEBHOOK_PATH));
         if (port < 1 || port > 65_535) {
-            throw new IllegalArgumentException("Webhook port must be between 1 and 65535");
+            throw new IllegalArgumentException("Webhook port must `be between 1 and 65535");
         }
         try {
             WEBHOOK_SERVER = HttpServer.create(new InetSocketAddress(host, port), 0);
-            WEBHOOK_SERVER.createContext(path, SandboxOpenApiIntegrationTest::handleWebhook);
+            WEBHOOK_SERVER.createContext(path, ShareCardSandboxOpenApiIntegrationTest::handleWebhook);
             WEBHOOK_SERVER.start();
             LOGGER.info("Webhook listener started: http://{}:{}{}", host, port, path);
         } catch (IOException exception) {
@@ -260,6 +277,18 @@ class SandboxOpenApiIntegrationTest {
     }
 
     @Test
+    @Order(12)
+    void resolveSharedCardholderAccordingToCardBinFromSandbox() {
+        CardBinResponse cardBin = firstCardBin();
+        if (supportsCustomCardholder(cardBin)) {
+            assertNotNull(cardHolderIdForIssue());
+        } else {
+            LOGGER.info("Shared-card BIN {} does not support an explicit cardholder; cardHolderId will be omitted",
+                    cardBin.cardBin());
+        }
+    }
+
+    @Test
     @Order(13)
     void issueCardFromSandbox() {
         assertNotNull(issueCardTaskId());
@@ -269,6 +298,21 @@ class SandboxOpenApiIntegrationTest {
     @Order(14)
     void waitForCardOpenStatusWebhookFromSandbox() {
         assertNotNull(ensureCardId());
+    }
+
+    @Test
+    @Order(16)
+    void listSharedCardsAssociatedWithCardholderFromSandbox() {
+        CardBinResponse cardBin = firstCardBin();
+        if (!supportsCustomCardholder(cardBin)) {
+            LOGGER.info("Skipping shared-card/cardholder association check because BIN {} does not support cardholders",
+                    cardBin.cardBin());
+            return;
+        }
+        Long cardId = ensureCardId();
+        assertTrue(authorizedClient().cardHolders().associatedCards(
+                        new CardHolderCardPageRequest(1, 20, cardHolderIdForIssue(), cardId)).list().stream()
+                .anyMatch(item -> Objects.equals(cardId, item.memberCardId())));
     }
 
     @Test
@@ -302,8 +346,12 @@ class SandboxOpenApiIntegrationTest {
     @Test
     @Order(27)
     void modifyCardLimitFromSandbox() {
-        assertTrue(authorizedClient().cards().modifyLimit(new CardLimitUpdateRequest(
-                ensureCardId(), BigDecimal.ONE)));
+        CACHED_LIMIT_OPERATION_RECORD_ID = Objects.requireNonNull(
+                authorizedClient().cards().modifyLimitAsync(new CardLimitUpdateRequest(
+                        ensureCardId(), BigDecimal.ONE)),
+                "Limit operation-record ID is missing");
+        RechargeCardOperationRecordResponse result = awaitLimitOperation(CACHED_LIMIT_OPERATION_RECORD_ID);
+        assertTrue("SUCCESS".equalsIgnoreCase(result.status()));
     }
 
     @Test
@@ -431,19 +479,21 @@ class SandboxOpenApiIntegrationTest {
     }
 
 
-    private static synchronized Long firstCardBinId() {
-        if (CACHED_CARD_BIN_ID == null) {
+    private static synchronized CardBinResponse firstCardBin() {
+        if (CACHED_CARD_BIN == null) {
             PageResultEx<CardBinResponse, Object> bins = authorizedClient().cards().bins(
                     new CardBinsRequest(1, 20, "SHARED", null, TEST_CARD_BIN, null));
             assertNotNull(bins);
-            CACHED_CARD_BIN_ID = bins.list().stream()
+            CACHED_CARD_BIN = bins.list().stream()
                     .filter(item -> TEST_CARD_BIN.equals(item.cardBin()))
-                    .map(CardBinResponse::cardBinId)
-                    .filter(Objects::nonNull)
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("Card BIN not found: " + TEST_CARD_BIN));
         }
-        return CACHED_CARD_BIN_ID;
+        return CACHED_CARD_BIN;
+    }
+
+    private static synchronized Long firstCardBinId() {
+        return Objects.requireNonNull(firstCardBin().cardBinId(), "Card BIN ID is missing");
     }
 
     private static synchronized Long ensureSharedAccountId() {
@@ -490,6 +540,138 @@ class SandboxOpenApiIntegrationTest {
         }
     }
 
+    private static boolean supportsCustomCardholder(CardBinResponse cardBin) {
+        return cardBin != null && Objects.equals(1, cardBin.customCardholder());
+    }
+
+    private static synchronized Long cardHolderIdForIssue() {
+        if (CACHED_CARD_HOLDER_ID == null) {
+            CardHolderDetailResponse existing = existingCardHolderTemplate();
+            if (existing != null && existing.cardHolderId() != null) {
+                CACHED_CARD_HOLDER_ID = existing.cardHolderId();
+                LOGGER.info("Reusing Sandbox cardholder for shared-card issuance: {}", CACHED_CARD_HOLDER_ID);
+            } else {
+                CACHED_CARD_HOLDER_ID = Objects.requireNonNull(
+                        authorizedClient().cardHolders().add(cardHolderProfile("Shared-card issuance")),
+                        "Cardholder ID is missing");
+                LOGGER.info("Created Sandbox cardholder for shared-card issuance: {}", CACHED_CARD_HOLDER_ID);
+            }
+        }
+        return CACHED_CARD_HOLDER_ID;
+    }
+
+    private static CardHolderCreateRequest cardHolderProfile(String addressLine2) {
+        long suffix = System.currentTimeMillis() % 1_000_000L;
+        CardHolderDetailResponse template = existingCardHolderTemplate();
+        CardHolderCountryResponse country = selectedCardHolderCountry(template);
+        return new CardHolderCreateRequest(
+                "Sdk",
+                "Sandbox" + alphabeticSuffix(suffix),
+                LocalDate.of(1990, 1, 15),
+                "sdk-shared-card-" + suffix + "@example.com",
+                localPhone(country, suffix),
+                country.areaCode(),
+                country.countryId(),
+                template == null ? "10001" : template.postalCode(),
+                template == null ? "New York" : template.state(),
+                template == null ? "New York" : template.city(),
+                template == null ? "350 Fifth Avenue" : template.addressLine1(),
+                addressLine2);
+    }
+
+    private static CardHolderCountryResponse selectedCardHolderCountry(CardHolderDetailResponse template) {
+        List<CardHolderCountryResponse> countries = cardHolderCountries();
+        Long configuredId = optionalLong(
+                "LUMINAL_OPEN_API_CARD_HOLDER_COUNTRY_ID", "luminal.openApi.cardHolderCountryId");
+        String configuredAreaCode = configured(
+                "LUMINAL_OPEN_API_CARD_HOLDER_AREA_CODE", "luminal.openApi.cardHolderAreaCode", null);
+        if (configuredId != null) {
+            CardHolderCountryResponse country = countries.stream()
+                    .filter(item -> Objects.equals(configuredId, item.countryId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Configured cardholder country ID is not returned by cardHolders().countries(): "
+                                    + configuredId));
+            if (configuredAreaCode != null && !Objects.equals(configuredAreaCode, country.areaCode())) {
+                throw new IllegalStateException("Configured cardholder area code does not match country "
+                        + configuredId + ": expected " + country.areaCode() + ", actual " + configuredAreaCode);
+            }
+            return country;
+        }
+        if (configuredAreaCode != null) {
+            List<CardHolderCountryResponse> matches = countries.stream()
+                    .filter(item -> Objects.equals(configuredAreaCode, item.areaCode()))
+                    .toList();
+            if (matches.size() != 1) {
+                throw new IllegalStateException("Configured cardholder area code must match exactly one country: "
+                        + configuredAreaCode);
+            }
+            return matches.get(0);
+        }
+        if (template != null && template.countryId() != null) {
+            CardHolderCountryResponse templateCountry = countries.stream()
+                    .filter(item -> Objects.equals(template.countryId(), item.countryId()))
+                    .findFirst()
+                    .orElse(null);
+            if (templateCountry != null) {
+                return templateCountry;
+            }
+        }
+        return countries.stream()
+                .filter(item -> "HK".equalsIgnoreCase(item.countryCode()))
+                .findFirst()
+                .orElse(countries.get(0));
+    }
+
+    private static synchronized List<CardHolderCountryResponse> cardHolderCountries() {
+        if (CACHED_CARD_HOLDER_COUNTRIES == null) {
+            List<CardHolderCountryResponse> countries = authorizedClient().cardHolders().countries();
+            if (countries == null || countries.isEmpty()) {
+                throw new IllegalStateException("cardHolders().countries() returned no countries");
+            }
+            CACHED_CARD_HOLDER_COUNTRIES = List.copyOf(countries);
+        }
+        return CACHED_CARD_HOLDER_COUNTRIES;
+    }
+
+    private static String localPhone(CardHolderCountryResponse country, long suffix) {
+        Integer phoneMaxLength = country.phoneMaxLength();
+        if (phoneMaxLength == null || phoneMaxLength <= 0) {
+            throw new IllegalStateException("Country has invalid phoneMaxLength: " + country.countryId());
+        }
+        String seed = Long.toString(Math.floorMod(suffix, 1_000_000L));
+        StringBuilder phone = new StringBuilder(phoneMaxLength).append('5');
+        while (phone.length() < phoneMaxLength) {
+            phone.append(seed);
+        }
+        return phone.substring(0, phoneMaxLength);
+    }
+
+    private static String alphabeticSuffix(long value) {
+        long remaining = Math.floorMod(value, 26L * 26L * 26L);
+        StringBuilder suffix = new StringBuilder(3);
+        for (int index = 0; index < 3; index++) {
+            suffix.append((char) ('A' + remaining % 26));
+            remaining /= 26;
+        }
+        return suffix.toString();
+    }
+
+    private static CardHolderDetailResponse existingCardHolderTemplate() {
+        if (CACHED_CARD_HOLDER_TEMPLATE == null) {
+            var result = authorizedClient().cardHolders().page(
+                    new CardHolderPageRequest(1, 1, null, null, null, null, null));
+            if (result != null && result.list() != null) {
+                CACHED_CARD_HOLDER_TEMPLATE = result.list().stream()
+                        .filter(item -> item.cardHolderId() != null)
+                        .map(item -> authorizedClient().cardHolders().detail(item.cardHolderId()))
+                        .findFirst()
+                        .orElse(null);
+            }
+        }
+        return CACHED_CARD_HOLDER_TEMPLATE;
+    }
+
     private static synchronized Long ensureCardGroupId() {
         if (CACHED_CARD_GROUP_ID == null) {
             if (CARD_GROUP_CREATION_ATTEMPTED) {
@@ -527,6 +709,8 @@ class SandboxOpenApiIntegrationTest {
             CARD_CREATION_ATTEMPTED = true;
             CACHED_CARD_NAME = uniqueName("sdk-sandbox-card");
             var privateKey = RsaSignatures.readPrivateKey(readPrivateKeyPem());
+            CardBinResponse cardBin = firstCardBin();
+            Long cardHolderId = supportsCustomCardholder(cardBin) ? cardHolderIdForIssue() : null;
             CACHED_CARD_TASK_ID = Objects.requireNonNull(authorizedClient().cards().issue(
                     new IssueCardRequest(
                             1,
@@ -535,8 +719,10 @@ class SandboxOpenApiIntegrationTest {
                             CACHED_CARD_NAME,
                             "SHARED",
                             ensureSharedAccountId(),
+                            null,
                             BigDecimal.ONE,
-                            BigDecimal.ONE), privateKey), "Card issue task ID is missing");
+                            BigDecimal.ONE,
+                            cardHolderId), privateKey), "Card issue task ID is missing");
         }
         return CACHED_CARD_TASK_ID;
     }
@@ -550,7 +736,7 @@ class SandboxOpenApiIntegrationTest {
         if (failure != null) {
             throw failure;
         }
-        synchronized (SandboxOpenApiIntegrationTest.class) {
+        synchronized (ShareCardSandboxOpenApiIntegrationTest.class) {
             if (CACHED_CARD_ID == null) {
                 failure = CARD_OPEN_FAILURE;
                 if (failure != null) {
@@ -652,9 +838,12 @@ class SandboxOpenApiIntegrationTest {
             }
             boolean cardOpenEvent = WebhookEventType.CARD_OPEN_STATUS.name().equals(eventName);
             boolean cardStatusEvent = WebhookEventType.CARD_STATUS.name().equals(eventName);
+            boolean limitEvent = WebhookEventType.CARD_LIMIT_STATUS.name().equals(eventName);
             boolean sharedAccountOpenEvent = WebhookEventType.SHARED_ACCOUNT_OPEN_STATUS.name().equals(eventName);
             boolean fundTransactionEvent = WebhookEventType.SHARE_ACCOUNT_FUND_TRANSACTIONS.name().equals(eventName);
-            if (!cardOpenEvent && !cardStatusEvent && !sharedAccountOpenEvent && !fundTransactionEvent) {
+            boolean settlementEvent = WebhookEventType.CARD_SETTLE_STATUS.name().equals(eventName);
+            if (!cardOpenEvent && !cardStatusEvent && !sharedAccountOpenEvent
+                    && !fundTransactionEvent && !settlementEvent && !limitEvent) {
                 respond(exchange, 200);
                 return;
             }
@@ -679,6 +868,8 @@ class SandboxOpenApiIntegrationTest {
                         ? JsonSupport.readValue(rawBody, CardOpenStatusWebhook.class)
                         : cardStatusEvent
                         ? JsonSupport.readValue(rawBody, CardStatusWebhook.class)
+                        : limitEvent
+                        ? JsonSupport.readValue(rawBody, RechargeCardTransferStatusWebhook.class)
                         : sharedAccountOpenEvent
                         ? JsonSupport.readValue(rawBody, SharedAccountOpenStatusWebhook.class)
                         : JsonSupport.readValue(rawBody, TransactionWebhook.class);
@@ -707,6 +898,17 @@ class SandboxOpenApiIntegrationTest {
                 }
                 CARD_STATUS_WEBHOOKS.computeIfAbsent(Long.valueOf(payload.memberCardId()),
                         ignored -> new CompletableFuture<>()).complete(payload);
+            } else if (limitEvent) {
+                RechargeCardTransferStatusWebhook payload =
+                        (RechargeCardTransferStatusWebhook) event.payload();
+                if (!isCurrentSharedCardLimit(payload)) {
+                    LOGGER.info("Ignoring CARD_LIMIT_STATUS webhook for operationRecordId={} cardId={} cardType={} operationType={} status={}",
+                            payload.memberCardOperationRecordId(), payload.memberCardId(), payload.cardType(),
+                            payload.operationType(), payload.status());
+                } else {
+                    LIMIT_WEBHOOKS.computeIfAbsent(payload.memberCardOperationRecordId(),
+                            ignored -> new CompletableFuture<>()).complete(payload);
+                }
             } else if (sharedAccountOpenEvent) {
                 SharedAccountOpenStatusWebhook payload = (SharedAccountOpenStatusWebhook) event.payload();
                 if (payload.memberSharedAccountId() == null || payload.status() == null || payload.status().isBlank()) {
@@ -726,6 +928,17 @@ class SandboxOpenApiIntegrationTest {
                 } else {
                     LOGGER.info("Ignoring non-terminal SHARED_ACCOUNT_OPEN_STATUS webhook accountId={} status={}",
                             payload.memberSharedAccountId(), payload.status());
+                }
+            } else if (settlementEvent) {
+                TransactionWebhook payload = (TransactionWebhook) event.payload();
+                if (!isCurrentSharedCardSettlement(payload)) {
+                    LOGGER.info("Ignoring CARD_SETTLE_STATUS webhook for transactionId={} accountId={} cardId={} cardType={}",
+                            payload.sharedAccountTransactionId(), payload.memberSharedAccountId(),
+                            payload.memberCardId(), payload.cardType());
+                } else {
+                    SETTLEMENT_WEBHOOKS.put(payload.sharedAccountTransactionId(), payload);
+                    LOGGER.info("Recorded shared-card CARD_SETTLE_STATUS webhook transactionId={} settleStatus={} settleTime={}",
+                            payload.sharedAccountTransactionId(), payload.settleStatus(), payload.settleTime());
                 }
             } else {
                 TransactionWebhook payload = (TransactionWebhook) event.payload();
@@ -769,6 +982,45 @@ class SandboxOpenApiIntegrationTest {
         return "SUCCESS".equalsIgnoreCase(payload.status()) || "FAIL".equalsIgnoreCase(payload.status());
     }
 
+    private static boolean isFinalStatus(String status) {
+        return "SUCCESS".equalsIgnoreCase(status) || "FAIL".equalsIgnoreCase(status);
+    }
+
+    private static boolean isCurrentSharedCardSettlement(TransactionWebhook payload) {
+        if (payload.sharedAccountTransactionId() == null || payload.sharedAccountTransactionId().isBlank()
+                || !"SHARED".equalsIgnoreCase(payload.cardType())) {
+            return false;
+        }
+        Long accountId = parseLong(payload.memberSharedAccountId());
+        Long cardId = parseLong(payload.memberCardId());
+        return CACHED_SHARED_ACCOUNT_ID != null && Objects.equals(CACHED_SHARED_ACCOUNT_ID, accountId)
+                && CACHED_CARD_ID != null && Objects.equals(CACHED_CARD_ID, cardId);
+    }
+
+    private static boolean isCurrentSharedCardLimit(RechargeCardTransferStatusWebhook payload) {
+        if (payload == null || payload.memberCardOperationRecordId() == null
+                || CACHED_CARD_ID == null || !Objects.equals(CACHED_CARD_ID, payload.memberCardId())) {
+            return false;
+        }
+        Long operationRecordId = payload.memberCardOperationRecordId();
+        return "SHARED".equalsIgnoreCase(payload.cardType())
+                && (Objects.equals(CACHED_LIMIT_OPERATION_RECORD_ID, operationRecordId)
+                || LIMIT_WEBHOOKS.containsKey(operationRecordId))
+                && "MODIFY_LIMITS".equalsIgnoreCase(payload.operationType())
+                && isFinalStatus(payload.status());
+    }
+
+    private static Long parseLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
     private static String webhookPublicKeyPem() {
         String configured = configured(
                 "LUMINAL_OPEN_API_WEBHOOK_PUBLIC_KEY",
@@ -778,7 +1030,7 @@ class SandboxOpenApiIntegrationTest {
             return configured;
         }
         String resource = "/org/luminal/openapi/sdk/integration/platform-public-key.pem";
-        try (InputStream input = SandboxOpenApiIntegrationTest.class.getResourceAsStream(resource)) {
+        try (InputStream input = ShareCardSandboxOpenApiIntegrationTest.class.getResourceAsStream(resource)) {
             return input == null ? null : new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to read webhook public key resource", exception);
@@ -849,11 +1101,104 @@ class SandboxOpenApiIntegrationTest {
                 + expectedStatus + "; current status=" + status);
     }
 
+    private static RechargeCardOperationRecordResponse awaitLimitOperation(Long operationRecordId) {
+        failOnWebhookError();
+        CompletableFuture<RechargeCardTransferStatusWebhook> future = LIMIT_WEBHOOKS.computeIfAbsent(
+                operationRecordId, ignored -> new CompletableFuture<>());
+        try {
+            RechargeCardTransferStatusWebhook webhook = awaitWebhook(
+                    future, "CARD_LIMIT_STATUS operationRecordId=" + operationRecordId);
+            validateSharedCardLimit(operationRecordId, CACHED_CARD_ID,
+                    webhook.memberCardOperationRecordId(), webhook.memberCardId(), webhook.cardType(),
+                    webhook.operationType(), webhook.status(), webhook.message());
+            return operationRecordFromWebhook(webhook);
+        } catch (TimeoutException exception) {
+            return queryFinalLimitOperationRecord(operationRecordId, exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for CARD_LIMIT_STATUS webhook", exception);
+        } catch (ExecutionException exception) {
+            throw new IllegalStateException("CARD_LIMIT_STATUS webhook failed", exception.getCause());
+        } finally {
+            LIMIT_WEBHOOKS.remove(operationRecordId, future);
+        }
+    }
+
+    private static RechargeCardOperationRecordResponse queryFinalLimitOperationRecord(
+            Long operationRecordId, TimeoutException webhookTimeout) {
+        RechargeCardOperationRecordResponse result = Objects.requireNonNull(
+                authorizedClient().cards().operationRecord(new RechargeCardOperationRecordRequest(operationRecordId)),
+                "Limit operation record is missing");
+        if (!isFinalStatus(result.status())) {
+            String message = "CARD_LIMIT_STATUS webhook timed out after " + WEBHOOK_QUERY_TIMEOUT_SECONDS
+                    + " seconds and operation record is not final: operationRecordId=" + operationRecordId
+                    + ", status=" + result.status();
+            throw new IllegalStateException(message, webhookTimeout);
+        }
+        validateSharedCardLimit(operationRecordId, CACHED_CARD_ID,
+                result.memberCardOperationRecordId(), result.memberCardId(), result.cardType(),
+                result.operationType(), result.status(), result.message());
+        return result;
+    }
+
+    private static RechargeCardOperationRecordResponse operationRecordFromWebhook(
+            RechargeCardTransferStatusWebhook webhook) {
+        return new RechargeCardOperationRecordResponse(
+                webhook.memberCardOperationRecordId(),
+                webhook.memberCardId(),
+                webhook.cardType(),
+                webhook.operationType(),
+                webhook.amount(),
+                webhook.currencyCode(),
+                webhook.balance(),
+                webhook.status(),
+                webhook.message(),
+                null,
+                webhook.updateTime() == null ? null : webhook.updateTime().toInstant(ZoneOffset.UTC).toEpochMilli());
+    }
+
+    private static void validateSharedCardLimit(
+            Long expectedOperationRecordId,
+            Long expectedMemberCardId,
+            Long actualOperationRecordId,
+            Long actualMemberCardId,
+            String actualCardType,
+            String actualOperationType,
+            String status,
+            String message) {
+        if (!Objects.equals(expectedOperationRecordId, actualOperationRecordId)) {
+            throw new IllegalStateException("Unexpected operation record in CARD_LIMIT_STATUS webhook: "
+                    + actualOperationRecordId);
+        }
+        if (!Objects.equals(expectedMemberCardId, actualMemberCardId)) {
+            throw new IllegalStateException("Unexpected member card for operation "
+                    + expectedOperationRecordId + ": " + actualMemberCardId);
+        }
+        if (!"SHARED".equalsIgnoreCase(actualCardType)) {
+            throw new IllegalStateException("Unexpected card type for operation "
+                    + expectedOperationRecordId + ": " + actualCardType);
+        }
+        if (!"MODIFY_LIMITS".equalsIgnoreCase(actualOperationType)) {
+            throw new IllegalStateException("Unexpected operation type for "
+                    + expectedOperationRecordId + ": " + actualOperationType);
+        }
+        if ("FAIL".equalsIgnoreCase(status)) {
+            throw new IllegalStateException("CARD_LIMIT_STATUS operation failed: "
+                    + expectedOperationRecordId + ", " + message);
+        }
+    }
+
     private static void awaitSharedAccountTransaction(String transactionId, Long accountId) {
         if (transactionId == null || transactionId.isBlank()) {
             throw new IllegalStateException("Shared-account transaction ID is missing");
         }
         String status = null;
+        TransactionWebhook settlementWebhook = SETTLEMENT_WEBHOOKS.get(transactionId);
+        if (settlementWebhook != null) {
+            LOGGER.info("Keeping CARD_SETTLE_STATUS separate while waiting for shared-account transactionId={} "
+                            + "fund webhook: settleStatus={} settleTime={}",
+                    transactionId, settlementWebhook.settleStatus(), settlementWebhook.settleTime());
+        }
         CompletableFuture<TransactionWebhook> webhookFuture = FUND_TRANSACTION_WEBHOOKS.computeIfAbsent(
                 transactionId, ignored -> new CompletableFuture<>());
         try {
@@ -894,6 +1239,13 @@ class SandboxOpenApiIntegrationTest {
 
     private static boolean isUnauthorized(LuminalApiException exception) {
         return exception.httpStatus() == 401 || exception.apiCode() != null && exception.apiCode() == 401;
+    }
+
+    private static void failOnWebhookError() {
+        Throwable error = WEBHOOK_ERROR.get();
+        if (error != null) {
+            throw new IllegalStateException("Shared-card webhook failed", error);
+        }
     }
 
     private static <T> T awaitWebhook(CompletableFuture<T> future, String operation)
@@ -996,7 +1348,7 @@ class SandboxOpenApiIntegrationTest {
 
     private static String readPrivateKeyPem() {
         String resource = "/org/luminal/openapi/sdk/integration/rsa-private-key.pem";
-        try (InputStream input = SandboxOpenApiIntegrationTest.class.getResourceAsStream(resource)) {
+        try (InputStream input = ShareCardSandboxOpenApiIntegrationTest.class.getResourceAsStream(resource)) {
             if (input == null) {
                 throw new IllegalStateException("Missing test resource: " + resource);
             }

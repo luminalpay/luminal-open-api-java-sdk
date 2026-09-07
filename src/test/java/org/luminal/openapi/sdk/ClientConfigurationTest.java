@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.luminal.openapi.sdk.model.CardModels.CardIdRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ClientConfigurationTest extends ApiTestSupport {
@@ -29,5 +30,10 @@ class ClientConfigurationTest extends ApiTestSupport {
     void baseUrlRejectsFragment() {
         assertThrows(IllegalArgumentException.class,
                 () -> new LuminalOpenApiClient("https://api.example.com#open-api"));
+    }
+
+    @Test
+    void exposesCardholderApi() {
+        assertNotNull(client.cardHolders());
     }
 }

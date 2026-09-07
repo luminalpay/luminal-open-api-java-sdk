@@ -96,6 +96,16 @@ public final class SharedAccountModels {
     }
 
     /**
+     * Shared-account cancellation parameters.
+     *
+     * @param memberSharedAccountId target shared-account identifier
+     * @param remark                optional cancellation remark
+     * @param verifyCode            email or one-time verification code required by the server
+     */
+    public record SharedAccountCancelRequest(Long memberSharedAccountId, String remark, String verifyCode) {
+    }
+
+    /**
      * Identifier of a submitted shared-account transaction.
      *
      * @param sharedAccountTransactionId shared-account transaction identifier
@@ -149,6 +159,8 @@ public final class SharedAccountModels {
      * @param beforeBalance              card balance before the transaction
      * @param beforeAccountBalance       shared-account balance before the transaction
      * @param status                     transaction status; see {@link OpenApiEnums.TradeStatus}
+     * @param settleStatus               local settlement status; see {@link OpenApiEnums.SettleStatus}
+     * @param settleTime                 local settlement time; absent when the transaction is not settled
      * @param type                       public transaction type name; see {@link OpenApiEnums.SharedAccountTransactionType}
      * @param tradeType                  card transaction classification when applicable; see {@link OpenApiEnums.MemberTradeType}
      * @param description                transaction description
@@ -178,6 +190,8 @@ public final class SharedAccountModels {
             BigDecimal beforeBalance,
             BigDecimal beforeAccountBalance,
             String status,
+            String settleStatus,
+            LocalDateTime settleTime,
             String type,
             String tradeType,
             String description,
@@ -193,5 +207,41 @@ public final class SharedAccountModels {
             String merchantCity,
             String merchantMcc,
             String processStatus) {
+        /**
+         * Backward-compatible constructor for clients using the original transaction response shape.
+         */
+        public SharedAccountTransactionResponse(
+                Long sharedAccountTransactionId,
+                Long memberSharedAccountId,
+                Long memberCardId,
+                String maskCardNo,
+                String orderNo,
+                String originalOrderNo,
+                BigDecimal accountBalance,
+                BigDecimal balance,
+                BigDecimal beforeBalance,
+                BigDecimal beforeAccountBalance,
+                String status,
+                String type,
+                String tradeType,
+                String description,
+                BigDecimal tradeActualAmount,
+                String currencyCode,
+                String tradeCurrencyCode,
+                BigDecimal tradeAmount,
+                LocalDateTime tradeTime,
+                String merchantName,
+                String merchantId,
+                String merchantCountry,
+                String cardBin,
+                String merchantCity,
+                String merchantMcc,
+                String processStatus) {
+            this(sharedAccountTransactionId, memberSharedAccountId, memberCardId, maskCardNo,
+                    orderNo, originalOrderNo, accountBalance, balance, beforeBalance, beforeAccountBalance,
+                    status, null, null, type, tradeType, description, tradeActualAmount, currencyCode,
+                    tradeCurrencyCode, tradeAmount, tradeTime, merchantName, merchantId, merchantCountry,
+                    cardBin, merchantCity, merchantMcc, processStatus);
+        }
     }
 }

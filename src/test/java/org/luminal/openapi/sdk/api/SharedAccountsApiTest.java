@@ -5,6 +5,7 @@ import org.luminal.openapi.sdk.ApiTestSupport;
 import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
 import org.luminal.openapi.sdk.model.SharedAccountModels.CreateSharedAccountRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountBalanceRequest;
+import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountCancelRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountGetRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountIdResponse;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountPageRequest;
@@ -14,9 +15,11 @@ import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountTransactio
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountTransactionsRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SharedAccountsApiTest extends ApiTestSupport {
 
@@ -65,6 +68,19 @@ class SharedAccountsApiTest extends ApiTestSupport {
     }
 
     @Test
+    void cancelCallsCancelEndpoint() throws Exception {
+        respondData("true");
+
+        assertTrue(client.sharedAccounts().cancel(
+                new SharedAccountCancelRequest(11L, "close account", "otp-123")));
+
+        assertBearerPost("/open-api/v1/shared-account/cancel", "\"memberSharedAccountId\":11");
+        assertEquals("", request().header("sign"));
+        assertTrue(request().body().contains("\"remark\":\"close account\""));
+        assertTrue(request().body().contains("\"verifyCode\":\"otp-123\""));
+    }
+
+    @Test
     void detailsCallsDetailsEndpoint() throws Exception {
         respondData("{\"memberSharedAccountId\":11,\"accountName\":\"Main\",\"status\":\"ACTIVE\"}");
 
@@ -76,13 +92,16 @@ class SharedAccountsApiTest extends ApiTestSupport {
 
     @Test
     void transactionsCallsTransactionEndpoint() throws Exception {
-        respondData("{\"total\":1,\"list\":[{\"sharedAccountTransactionId\":21,\"status\":\"SUCCESS\"}],\"extra\":null}");
+        respondData("{\"total\":1,\"list\":[{\"sharedAccountTransactionId\":21,\"status\":\"SUCCESS\","
+                + "\"settleStatus\":\"PENDING\",\"settleTime\":\"2026-08-29T12:00:00\"}],\"extra\":null}");
 
         PageResultEx<SharedAccountTransactionResponse, Object> result =
                 client.sharedAccounts().transactions(new SharedAccountTransactionsRequest(
                         1, 10, 21L, 11L, null, "DEPOSIT", List.of()));
 
         assertEquals("SUCCESS", result.list().get(0).status());
+        assertEquals("PENDING", result.list().get(0).settleStatus());
+        assertEquals(LocalDateTime.of(2026, 8, 29, 12, 0), result.list().get(0).settleTime());
         assertBearerPost("/open-api/v1/shared-account/transactions", "\"type\":\"DEPOSIT\"");
     }
 }

@@ -3,23 +3,22 @@ package org.luminal.openapi.sdk.webhook;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.luminal.openapi.sdk.RsaSignatures;
-import org.luminal.openapi.sdk.webhook.WebhookEvent;
-import org.luminal.openapi.sdk.webhook.WebhookEventType;
-import org.luminal.openapi.sdk.webhook.WebhookVerificationException;
-import org.luminal.openapi.sdk.webhook.WebhookVerifier;
 import org.luminal.openapi.sdk.model.WebhookModels.CardOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.CardStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.SharedAccountOpenStatusWebhook;
 import org.luminal.openapi.sdk.model.WebhookModels.TransactionWebhook;
+import org.luminal.openapi.sdk.model.WebhookModels.RechargeCardTransferStatusWebhook;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.time.LocalDateTime;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -61,6 +60,101 @@ class WebhookVerifierTest {
         TransactionWebhook payload = assertInstanceOf(TransactionWebhook.class, event.payload());
         assertEquals("O1", payload.orderNo());
         assertEquals("event-1", event.eventId());
+    }
+
+    @Test
+    void parsesRechargeCardTransactions() {
+        String body = "{\"memberCardTransactionId\":\"31\",\"memberCardId\":\"5\","
+                + "\"cardType\":\"RECHARGE\",\"status\":\"SUCCESS\","
+                + "\"settleStatus\":\"SETTLED\",\"settleTime\":\"2026-08-31T11:15:30\","
+                + "\"currencyCode\":\"USD\",\"tradeCurrencyCode\":\"EUR\","
+                + "\"tradeTime\":\"2026-08-31T10:15:30\"}";
+
+        TransactionWebhook payload = assertInstanceOf(TransactionWebhook.class,
+                parse(WebhookEventType.CARD_TRANSACTIONS, body).payload());
+
+        assertEquals("31", payload.memberCardTransactionId());
+        assertEquals("RECHARGE", payload.cardType());
+        assertEquals("SUCCESS", payload.status());
+        assertEquals("SETTLED", payload.settleStatus());
+        assertEquals(LocalDateTime.of(2026, 8, 31, 11, 15, 30), payload.settleTime());
+        assertEquals("USD", payload.currencyCode());
+        assertEquals("EUR", payload.tradeCurrencyCode());
+    }
+
+    @Test
+    void parsesSharedCardSettlementStatus() {
+        String body = "{\"sharedAccountTransactionId\":\"21\",\"cardType\":\"SHARED\","
+                + "\"memberCardId\":\"5\",\"status\":\"SUCCESS\","
+                + "\"settleStatus\":\"SETTLED\",\"settleTime\":\"2026-08-31T11:15:30\","
+                + "\"type\":\"CARD_TRANSACTION\"}";
+
+        TransactionWebhook payload = assertInstanceOf(TransactionWebhook.class,
+                parse(WebhookEventType.CARD_SETTLE_STATUS, body).payload());
+
+        assertEquals("21", payload.sharedAccountTransactionId());
+        assertEquals("SHARED", payload.cardType());
+        assertEquals("SETTLED", payload.settleStatus());
+        assertEquals(LocalDateTime.of(2026, 8, 31, 11, 15, 30), payload.settleTime());
+    }
+
+    @Test
+    void parsesRechargeCardSettlementStatus() {
+        String body = "{\"memberCardTransactionId\":\"31\",\"memberCardId\":\"5\","
+                + "\"cardType\":\"RECHARGE\",\"status\":\"SUCCESS\","
+                + "\"settleStatus\":\"SETTLED\",\"settleTime\":\"2026-08-31T11:15:30\"}";
+
+        TransactionWebhook payload = assertInstanceOf(TransactionWebhook.class,
+                parse(WebhookEventType.CARD_SETTLE_STATUS, body).payload());
+
+        assertEquals("31", payload.memberCardTransactionId());
+        assertEquals("RECHARGE", payload.cardType());
+        assertEquals("SETTLED", payload.settleStatus());
+        assertEquals(LocalDateTime.of(2026, 8, 31, 11, 15, 30), payload.settleTime());
+        assertNull(payload.sharedAccountTransactionId());
+    }
+
+    @Test
+    void parsesRechargeCardFundingStatus() {
+        String body = "{\"memberCardOperationRecordId\":601,\"memberCardId\":5,"
+                + "\"cardType\":\"RECHARGE\",\"operationType\":\"RECHARGE\","
+                + "\"amount\":25,\"status\":\"SUCCESS\","
+                + "\"updateTime\":\"2026-08-31T10:15:30\"}";
+
+        RechargeCardTransferStatusWebhook payload = assertInstanceOf(RechargeCardTransferStatusWebhook.class,
+                parse(WebhookEventType.CARD_RECHARGE_STATUS, body).payload());
+
+        assertEquals(601L, payload.memberCardOperationRecordId());
+        assertEquals("RECHARGE", payload.operationType());
+    }
+
+    @Test
+    void parsesRechargeCardWithdrawalStatus() {
+        String body = "{\"memberCardOperationRecordId\":602,\"memberCardId\":5,"
+                + "\"cardType\":\"RECHARGE\",\"operationType\":\"WITHDRAW\","
+                + "\"amount\":10,\"status\":\"FAIL\",\"message\":\"declined\","
+                + "\"updateTime\":\"2026-08-31T10:15:30\"}";
+
+        RechargeCardTransferStatusWebhook payload = assertInstanceOf(RechargeCardTransferStatusWebhook.class,
+                parse(WebhookEventType.CARD_WITHDRAW_STATUS, body).payload());
+
+        assertEquals("WITHDRAW", payload.operationType());
+        assertEquals("declined", payload.message());
+    }
+
+    @Test
+    void parsesCardLimitStatus() {
+        String body = "{\"memberCardOperationRecordId\":603,\"memberCardId\":5,"
+                + "\"cardType\":\"RECHARGE\",\"operationType\":\"MODIFY_LIMITS\","
+                + "\"status\":\"SUCCESS\",\"message\":\"limit updated\","
+                + "\"updateTime\":\"2026-09-01T10:15:30\"}";
+
+        RechargeCardTransferStatusWebhook payload = assertInstanceOf(RechargeCardTransferStatusWebhook.class,
+                parse(WebhookEventType.CARD_LIMIT_STATUS, body).payload());
+
+        assertEquals(603L, payload.memberCardOperationRecordId());
+        assertEquals("MODIFY_LIMITS", payload.operationType());
+        assertEquals("SUCCESS", payload.status());
     }
 
     @Test

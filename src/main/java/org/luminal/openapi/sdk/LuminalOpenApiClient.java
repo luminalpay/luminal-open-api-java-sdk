@@ -4,6 +4,7 @@ import org.luminal.openapi.sdk.api.AccountsApi;
 import org.luminal.openapi.sdk.api.AuthApi;
 import org.luminal.openapi.sdk.api.CardGroupsApi;
 import org.luminal.openapi.sdk.api.CardsApi;
+import org.luminal.openapi.sdk.api.CardHoldersApi;
 import org.luminal.openapi.sdk.api.SharedAccountsApi;
 import org.luminal.openapi.sdk.api.TransactionsApi;
 import org.luminal.openapi.sdk.internal.TokenManager;
@@ -34,6 +35,7 @@ public final class LuminalOpenApiClient {
     private final TransactionsApi transactions;
     private final SharedAccountsApi sharedAccounts;
     private final CardsApi cards;
+    private final CardHoldersApi cardHolders;
     private final CardGroupsApi cardGroups;
     private final TokenManager tokenManager;
     /**
@@ -112,6 +114,7 @@ public final class LuminalOpenApiClient {
         this.transactions = new TransactionsApi(transport);
         this.sharedAccounts = new SharedAccountsApi(transport);
         this.cards = new CardsApi(transport);
+        this.cardHolders = new CardHoldersApi(transport);
         this.cardGroups = new CardGroupsApi(transport);
         this.tokenManager = tokenManager;
     }
@@ -135,6 +138,7 @@ public final class LuminalOpenApiClient {
         this.transactions = new TransactionsApi(transport);
         this.sharedAccounts = new SharedAccountsApi(transport);
         this.cards = new CardsApi(transport);
+        this.cardHolders = new CardHoldersApi(transport);
         this.cardGroups = new CardGroupsApi(transport);
         this.tokenManager = tokenManager;
     }
@@ -147,6 +151,7 @@ public final class LuminalOpenApiClient {
         this.transactions = new TransactionsApi(transport);
         this.sharedAccounts = new SharedAccountsApi(transport);
         this.cards = new CardsApi(transport);
+        this.cardHolders = new CardHoldersApi(transport);
         this.cardGroups = new CardGroupsApi(transport);
         this.tokenManager = tokenManager;
     }
@@ -215,6 +220,11 @@ public final class LuminalOpenApiClient {
     /** @return card endpoints */
     public CardsApi cards() {
         return cards;
+    }
+
+    /** @return cardholder endpoints */
+    public CardHoldersApi cardHolders() {
+        return cardHolders;
     }
 
     /** @return card-group endpoints */

@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +38,7 @@ public final class HttpTransport {
     private static final String REDACTED = "<redacted>";
     private static final Set<String> SENSITIVE_LOG_HEADERS = Set.of("authorization", "cookie", "set-cookie", "sign");
     private static final Set<String> SENSITIVE_LOG_BODY_KEYS = Set.of(
-            "accesstoken", "refreshtoken", "appsecret", "cvv", "cardno", "cardnumber");
+            "accesstoken", "refreshtoken", "appsecret", "cvv", "cardno", "cardnumber", "verifycode");
     private static final Logger DEFAULT_LOGGER = LoggerFactory.getLogger(HttpTransport.class);
 
     private final URI baseUri;
@@ -52,8 +53,8 @@ public final class HttpTransport {
     private final Logger logger;
 
     private HttpTransport(URI baseUri, Supplier<String> bearerTokenSupplier, HttpClient httpClient,
-            Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
-            Runnable unauthorizedRetryAction, boolean httpLoggingEnabled, Logger logger) {
+                          Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
+                          Runnable unauthorizedRetryAction, boolean httpLoggingEnabled, Logger logger) {
         this.baseUri = baseUri;
         this.bearerTokenSupplier = bearerTokenSupplier;
         this.httpClient = httpClient;
@@ -85,61 +86,61 @@ public final class HttpTransport {
     }
 
     public static HttpTransport create(String baseUrl, String bearerToken, Consumer<String> responseObserver,
-            Consumer<String> requestObserver) {
+                                       Consumer<String> requestObserver) {
         return create(baseUrl, bearerToken, responseObserver, requestObserver, "en", 0, null);
     }
 
     public static HttpTransport create(String baseUrl, String bearerToken, Consumer<String> responseObserver,
-            Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction) {
+                                       Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction) {
         return create(baseUrl, bearerToken, responseObserver, requestObserver, locale, unauthorizedRetryCount, unauthorizedRetryAction,
                 HttpClient.newBuilder().cookieHandler(new CookieManager()).connectTimeout(Duration.ofSeconds(10)).build());
     }
 
     public static HttpTransport create(String baseUrl, Supplier<String> bearerTokenSupplier,
-            Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
-            Runnable unauthorizedRetryAction) {
+                                       Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
+                                       Runnable unauthorizedRetryAction) {
         return create(baseUrl, bearerTokenSupplier, responseObserver, requestObserver, locale, unauthorizedRetryCount, unauthorizedRetryAction,
                 HttpClient.newBuilder().cookieHandler(new CookieManager()).connectTimeout(Duration.ofSeconds(10)).build());
     }
 
     public static HttpTransport create(String baseUrl, String bearerToken, Consumer<String> responseObserver,
-            Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction, HttpClient httpClient) {
+                                       Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction, HttpClient httpClient) {
         return create(baseUrl, bearerToken, responseObserver, requestObserver, locale, unauthorizedRetryCount,
                 unauthorizedRetryAction, httpClient, true);
     }
 
     public static HttpTransport create(String baseUrl, String bearerToken, Consumer<String> responseObserver,
-            Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction,
-            HttpClient httpClient, boolean httpLoggingEnabled) {
+                                       Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction,
+                                       HttpClient httpClient, boolean httpLoggingEnabled) {
         return create(baseUrl, bearerToken, responseObserver, requestObserver, locale, unauthorizedRetryCount,
                 unauthorizedRetryAction, httpClient, httpLoggingEnabled, DEFAULT_LOGGER);
     }
 
     public static HttpTransport create(String baseUrl, String bearerToken, Consumer<String> responseObserver,
-            Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction,
-            HttpClient httpClient, boolean httpLoggingEnabled, Logger logger) {
+                                       Consumer<String> requestObserver, String locale, int unauthorizedRetryCount, Runnable unauthorizedRetryAction,
+                                       HttpClient httpClient, boolean httpLoggingEnabled, Logger logger) {
         return new HttpTransport(validateBaseUri(baseUrl), fixedTokenSupplier(normalizeToken(bearerToken)),
                 Objects.requireNonNull(httpClient, "httpClient"), responseObserver, requestObserver, normalizeLocale(locale),
                 unauthorizedRetryCount, unauthorizedRetryAction, httpLoggingEnabled, logger);
     }
 
     public static HttpTransport create(String baseUrl, Supplier<String> bearerTokenSupplier,
-            Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
-            Runnable unauthorizedRetryAction, HttpClient httpClient) {
+                                       Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
+                                       Runnable unauthorizedRetryAction, HttpClient httpClient) {
         return create(baseUrl, bearerTokenSupplier, responseObserver, requestObserver, locale, unauthorizedRetryCount,
                 unauthorizedRetryAction, httpClient, true);
     }
 
     public static HttpTransport create(String baseUrl, Supplier<String> bearerTokenSupplier,
-            Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
-            Runnable unauthorizedRetryAction, HttpClient httpClient, boolean httpLoggingEnabled) {
+                                       Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
+                                       Runnable unauthorizedRetryAction, HttpClient httpClient, boolean httpLoggingEnabled) {
         return create(baseUrl, bearerTokenSupplier, responseObserver, requestObserver, locale, unauthorizedRetryCount,
                 unauthorizedRetryAction, httpClient, httpLoggingEnabled, DEFAULT_LOGGER);
     }
 
     public static HttpTransport create(String baseUrl, Supplier<String> bearerTokenSupplier,
-            Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
-            Runnable unauthorizedRetryAction, HttpClient httpClient, boolean httpLoggingEnabled, Logger logger) {
+                                       Consumer<String> responseObserver, Consumer<String> requestObserver, String locale, int unauthorizedRetryCount,
+                                       Runnable unauthorizedRetryAction, HttpClient httpClient, boolean httpLoggingEnabled, Logger logger) {
         return new HttpTransport(validateBaseUri(baseUrl), Objects.requireNonNull(bearerTokenSupplier, "bearerTokenSupplier"),
                 Objects.requireNonNull(httpClient, "httpClient"), responseObserver, requestObserver, normalizeLocale(locale),
                 unauthorizedRetryCount, unauthorizedRetryAction, httpLoggingEnabled, logger);
@@ -189,6 +190,13 @@ public final class HttpTransport {
     }
 
     /**
+     * Sends a bearer-authorized GET request.
+     */
+    public <T> T getAuthorized(String path, JavaType dataType) {
+        return request("GET", path, null, () -> authorizedHeaders(Map.of()), dataType);
+    }
+
+    /**
      * Sends pre-serialized bytes with bearer authorization.
      *
      * <p>This entry point guarantees that signed bytes are identical to transmitted bytes.</p>
@@ -210,6 +218,11 @@ public final class HttpTransport {
     }
 
     private <T> T post(String path, byte[] body, Supplier<Map<String, String>> headersSupplier, JavaType dataType) {
+        return request("POST", path, body, headersSupplier, dataType);
+    }
+
+    private <T> T request(
+            String method, String path, byte[] body, Supplier<Map<String, String>> headersSupplier, JavaType dataType) {
         LuminalApiException lastFailure = null;
         for (int attempt = 0; attempt <= unauthorizedRetryCount; attempt++) {
             Map<String, String> headers = Objects.requireNonNull(headersSupplier.get(), "headers");
@@ -217,15 +230,16 @@ public final class HttpTransport {
                     .timeout(REQUEST_TIMEOUT)
                     .header("Accept", "application/json")
                     .header("Accept-Language", locale)
-                    .POST(body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));
+                    .method(method, body == null ? HttpRequest.BodyPublishers.noBody()
+                            : HttpRequest.BodyPublishers.ofByteArray(body));
             if (body != null) {
                 builder.header("Content-Type", "application/json");
             }
             headers.forEach(builder::header);
             if (requestObserver != null) {
-                requestObserver.accept(formatRequest(path, body, headers));
+                requestObserver.accept(formatRequest(method, path, body, headers));
             }
-            traceRequest(path, body, headers);
+            traceRequest(method, path, body, headers);
 
             final HttpResponse<InputStream> response;
             try {
@@ -309,16 +323,17 @@ public final class HttpTransport {
         return body == null ? null : serialize(body);
     }
 
-    private String formatRequest(String path, byte[] body, Map<String, String> headers) {
-        return "REQUEST " + endpoint(path) + " HEADERS " + compact(String.valueOf(headers))
+    private String formatRequest(String method, String path, byte[] body, Map<String, String> headers) {
+        return "REQUEST " + method + " " + endpoint(path) + " HEADERS " + compact(String.valueOf(headers))
                 + " BODY " + (body == null ? "" : compact(new String(body, StandardCharsets.UTF_8)));
     }
 
-    private void traceRequest(String path, byte[] body, Map<String, String> headers) {
+    private void traceRequest(String method, String path, byte[] body, Map<String, String> headers) {
         if (!httpLoggingEnabled || !logger.isInfoEnabled()) {
             return;
         }
-        logger.info("REQUEST POST {} HEADERS {} BODY {}", endpoint(path), formatLogHeaders(headers), formatLogBody(body));
+        logger.info("REQUEST {} {} HEADERS {} BODY {}", method, endpoint(path), formatLogHeaders(headers),
+                formatLogBody(body));
     }
 
     public void logWebhook(String event, String eventId, byte[] body) {

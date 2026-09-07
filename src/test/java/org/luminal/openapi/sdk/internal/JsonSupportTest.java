@@ -1,11 +1,17 @@
 package org.luminal.openapi.sdk.internal;
 
 import org.junit.jupiter.api.Test;
+import org.luminal.openapi.sdk.model.CardModels.CardLimitUpdateRequest;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JsonSupportTest {
 
@@ -48,6 +54,19 @@ class JsonSupportTest {
     }
 
     @Test
+    void doesNotSerializeLegacyCardTypeForLimitUpdates() {
+        CardLimitUpdateRequest request = new CardLimitUpdateRequest(
+                5L, "RECHARGE", BigDecimal.TEN, new BigDecimal("100.00"), null);
+
+        String json = new String(JsonSupport.writeBytes(request));
+
+        assertEquals("RECHARGE", request.cardType());
+        assertFalse(json.contains("cardType"), json);
+        assertTrue(json.contains("\"dailyLimit\":10"), json);
+        assertTrue(json.contains("\"monthLimit\":100.00"), json);
+    }
+
+    @Test
     void readsEpochMillisAsUtcLocalDateTime() throws Exception {
         record Payload(LocalDateTime createTime) {
         }
@@ -56,6 +75,19 @@ class JsonSupportTest {
                 "{\"createTime\":1704067200000}".getBytes(), Payload.class);
 
         assertEquals(LocalDateTime.of(2024, 1, 1, 0, 0), payload.createTime());
+    }
+
+    @Test
+    void readsEpochMillisAndIsoTextAsZonedDateTime() throws Exception {
+        record Payload(ZonedDateTime createTime, ZonedDateTime updateTime) {
+        }
+
+        Payload payload = JsonSupport.readValue(
+                ("{\"createTime\":1704067200000,"
+                        + "\"updateTime\":\"2024-01-01T01:00:00+01:00\"}").getBytes(), Payload.class);
+
+        assertEquals(ZonedDateTime.of(2024, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), payload.createTime());
+        assertEquals(ZonedDateTime.of(2024, 1, 1, 1, 0, 0, 0, ZoneOffset.ofHours(1)), payload.updateTime());
     }
 
     @Test
