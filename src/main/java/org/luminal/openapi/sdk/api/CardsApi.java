@@ -47,7 +47,7 @@ public final class CardsApi {
     /**
      * Lists available card BIN products.
      *
-     * @param request page and card-product filters
+     * @param request page, card-product, and optional card-pool filters
      * @return matching card BIN products and page metadata
      */
     public PageResultEx<CardBinResponse, Object> bins(CardBinsRequest request) {

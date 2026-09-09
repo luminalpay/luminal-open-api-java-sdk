@@ -34,7 +34,7 @@ public final class SharedAccountsApi {
     /**
      * Creates and initially funds a shared account.
      *
-     * @param request card BIN, initial funding amount, and account name
+     * @param request card BIN, optional card pool, initial funding amount, and account name
      * @return identifier of the created shared account
      */
     public SharedAccountIdResponse create(CreateSharedAccountRequest request) {
@@ -44,7 +44,7 @@ public final class SharedAccountsApi {
     /**
      * Lists shared accounts belonging to the current member.
      *
-     * @param request page, shared-account identifier, and account-name filters
+     * @param request page, shared-account identifier, account-name, and optional card-pool filters
      * @return matching shared accounts and page metadata
      */
     public PageResultEx<SharedAccountResponse, Object> list(SharedAccountPageRequest request) {

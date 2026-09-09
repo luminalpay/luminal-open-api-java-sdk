@@ -133,6 +133,32 @@ boolean canceled = client.sharedAccounts().cancel(new SharedAccountCancelRequest
 The cancellation endpoint uses bearer authorization and returns the server's Boolean `data` value; it does not require a request signature.
 `verifyCode` is sensitive and should not be logged or persisted by the application.
 
+Card-pool shared-account opening:
+
+```java
+import org.luminal.openapi.sdk.model.CardModels.CardBinResponse;
+import org.luminal.openapi.sdk.model.CardModels.CardBinsRequest;
+import org.luminal.openapi.sdk.model.CardPoolModels.CardPoolRequest;
+import org.luminal.openapi.sdk.model.CardPoolModels.CardPoolResponse;
+import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
+import org.luminal.openapi.sdk.model.SharedAccountModels.CreateSharedAccountRequest;
+import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountIdResponse;
+import java.math.BigDecimal;
+import java.util.List;
+
+// The endpoint returns a plain List; retain this result for the current flow when selecting a pool.
+List<CardPoolResponse> pools = client.cardPools().list(new CardPoolRequest(null, null));
+CardPoolResponse pool = pools.get(0);
+PageResultEx<CardBinResponse, Object> bins = client.cards().bins(new CardBinsRequest(
+        1, 20, pool.cardPoolId(), "SHARED", null, null, null));
+SharedAccountIdResponse created = client.sharedAccounts().create(new CreateSharedAccountRequest(
+        null, pool.cardPoolId(), new BigDecimal("100.00"), "Main"));
+```
+
+`CardPoolRequest` only carries pool-level filters. `cardBinId` is not a card-pool list query condition; resolve the
+BIN after selecting the pool for inspection. Shared-account creation may use `cardPoolId` when the BIN is selected
+from a pool; card issuance continues to require `cardBinId`.
+
 Card-limit updates now infer the card type from `memberCardId`. New code can use the four-argument
 `CardLimitUpdateRequest(memberCardId, dailyLimit, monthLimit, totalLimit)` constructor. The earlier five-argument
 constructor remains source-compatible, but its legacy `cardType` value is not serialized.
@@ -167,6 +193,7 @@ Unless noted otherwise, endpoints use HTTP `POST`. `cardHolders().countries` use
 | `sharedAccounts().cancel` | `/open-api/v1/shared-account/cancel` | Cancel a shared account with an email/OTP verification code. |
 | `sharedAccounts().details` | `/open-api/v1/shared-account/details` | Retrieve shared-account details. |
 | `sharedAccounts().transactions` | `/open-api/v1/shared-account/transactions` | List shared-account transactions. |
+| `cardPools().list` | `/open-api/v1/cards/pools` | List available card pools as a plain list. |
 | `cards().bins` | `/open-api/v1/cards/bins` | List available card BIN products. |
 | `cards().issue` | `/open-api/v1/cards/issue` | Submit a signed card issuance request. |
 | `cards().list` | `/open-api/v1/cards/list` | List issued cards. |
@@ -269,7 +296,10 @@ mvn -f luminal-module-open-api/luminal-open-api-java-sdk/pom.xml test
 
 ### Sandbox integration tests
 
-`ShareCardSandboxOpenApiIntegrationTest` covers the shared-card flow. `RechargeCardSandboxOpenApiIntegrationTest` independently
+`ShareCardSandboxOpenApiIntegrationTest` covers the fixed-BIN shared-card flow. `CardPoolSharedAccountSandboxOpenApiIntegrationTest`
+inherits and runs the complete shared-card flow—including shared-account funding, card issuance, webhook waits, card
+queries, limit updates, freeze/unfreeze/cancel, and card-group CRUD—after selecting a card pool and its SHARED BIN.
+`RechargeCardSandboxOpenApiIntegrationTest` independently
 covers recharge-card issuance, funding, withdrawal, operation-record queries, card transactions, lifecycle operations,
 and recharge-card webhooks against the real Sandbox. The supplied Sandbox credentials are test-class defaults;
 environment variables or JVM properties override them:
@@ -283,7 +313,14 @@ mvn -f luminal-module-open-api/luminal-open-api-java-sdk/pom.xml `
 
 mvn -f luminal-module-open-api/luminal-open-api-java-sdk/pom.xml `
   -Dtest=org.luminal.openapi.sdk.integration.RechargeCardSandboxOpenApiIntegrationTest test
+
+mvn -f luminal-module-open-api/luminal-open-api-java-sdk/pom.xml `
+  -Dtest=org.luminal.openapi.sdk.integration.CardPoolSharedAccountSandboxOpenApiIntegrationTest test
 ```
+
+The card-pool test uses the same fixed Sandbox configuration as the shared-card test, caches the plain card-pool list
+once, selects the first pool that can open a shared account, resolves the fixed SHARED BIN `22346703`, and opens the
+account with an initial amount of `100.00`.
 
 The integration test starts a local HTTP webhook receiver before the first test. Defaults:
 

@@ -19,6 +19,7 @@ public final class CardModels {
      *
      * @param pageNo           one-based page number; the server default is {@code 1}
      * @param pageSize         number of records requested per page; the server default is {@code 10}
+     * @param cardPoolId       optional card-pool identifier
      * @param cardType         required card product type; this endpoint currently accepts {@link OpenApiEnums.CardType#SHARED}
      * @param cardOrganization optional card network or organization; see {@link OpenApiEnums.CardOrganization}
      * @param cardBin          optional card BIN digits
@@ -27,16 +28,26 @@ public final class CardModels {
     public record CardBinsRequest(
             Integer pageNo,
             Integer pageSize,
+            Long cardPoolId,
             String cardType,
             String cardOrganization,
             String cardBin,
             String areaCode) {
+        /**
+         * Backward-compatible constructor without a card-pool filter.
+         */
+        public CardBinsRequest(Integer pageNo, Integer pageSize, String cardType, String cardOrganization,
+                String cardBin, String areaCode) {
+            this(pageNo, pageSize, null, cardType, cardOrganization, cardBin, areaCode);
+        }
     }
 
     /**
      * Card BIN product information.
      *
      * @param cardBinId           card BIN product identifier
+     * @param cardPoolId          associated card-pool identifier
+     * @param poolName            associated card-pool name
      * @param cardType            card product type; see {@link OpenApiEnums.CardType}
      * @param currencyCode        supported ISO 4217 currency code; see {@link OpenApiEnums.CurrencyCode}
      * @param areaCode            card product area code
@@ -48,6 +59,8 @@ public final class CardModels {
      */
     public record CardBinResponse(
             Long cardBinId,
+            Long cardPoolId,
+            String poolName,
             String cardType,
             String currencyCode,
             String areaCode,
@@ -56,10 +69,20 @@ public final class CardModels {
             String applicableScenarios,
             Integer customCardholder,
             Integer canLimit) {
+        /**
+         * Backward-compatible constructor for the previous response shape.
+         */
+        public CardBinResponse(Long cardBinId, String cardType, String currencyCode, String areaCode,
+                String cardBin, String cardOrganization, String applicableScenarios,
+                Integer customCardholder, Integer canLimit) {
+            this(cardBinId, null, null, cardType, currencyCode, areaCode, cardBin, cardOrganization,
+                    applicableScenarios, customCardholder, canLimit);
+        }
+
         @SuppressWarnings("unused")
         public CardBinResponse(Long cardBinId, String cardType, String currencyCode, String areaCode,
                 String cardBin, String cardOrganization, String applicableScenarios) {
-            this(cardBinId, cardType, currencyCode, areaCode, cardBin, cardOrganization,
+            this(cardBinId, null, null, cardType, currencyCode, areaCode, cardBin, cardOrganization,
                     applicableScenarios, null, null);
         }
     }

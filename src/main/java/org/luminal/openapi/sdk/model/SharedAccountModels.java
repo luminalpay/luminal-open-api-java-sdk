@@ -15,11 +15,28 @@ public final class SharedAccountModels {
     /**
      * Shared-account creation parameters.
      *
-     * @param cardBinId      card BIN product identifier
+     * @param cardBinId      card BIN product identifier; at least one selector is required
+     * @param cardPoolId     card-pool identifier; at least one selector is required
      * @param rechargeAmount initial account funding amount; minimum {@code 0.01}
      * @param accountName    user-visible shared-account name
      */
-    public record CreateSharedAccountRequest(Long cardBinId, BigDecimal rechargeAmount, String accountName) {
+    public record CreateSharedAccountRequest(
+            Long cardBinId,
+            Long cardPoolId,
+            BigDecimal rechargeAmount,
+            String accountName) {
+        public CreateSharedAccountRequest {
+            if (cardBinId == null && cardPoolId == null) {
+                throw new IllegalArgumentException("At least one of cardBinId or cardPoolId must be provided");
+            }
+        }
+
+        /**
+         * Backward-compatible constructor without a card-pool association.
+         */
+        public CreateSharedAccountRequest(Long cardBinId, BigDecimal rechargeAmount, String accountName) {
+            this(cardBinId, null, rechargeAmount, accountName);
+        }
     }
 
     /**
@@ -37,12 +54,21 @@ public final class SharedAccountModels {
      * @param pageSize              number of records requested per page; the server default is {@code 10}
      * @param memberSharedAccountId optional shared-account identifier
      * @param accountName           optional shared-account name filter
+     * @param cardPoolId            optional card-pool identifier
      */
     public record SharedAccountPageRequest(
             Integer pageNo,
             Integer pageSize,
             Long memberSharedAccountId,
-            String accountName) {
+            String accountName,
+            Long cardPoolId) {
+        /**
+         * Backward-compatible constructor without a card-pool filter.
+         */
+        public SharedAccountPageRequest(Integer pageNo, Integer pageSize, Long memberSharedAccountId,
+                String accountName) {
+            this(pageNo, pageSize, memberSharedAccountId, accountName, null);
+        }
     }
 
     /**
@@ -54,6 +80,8 @@ public final class SharedAccountModels {
      * @param createTime              shared-account creation time
      * @param cardBin                 card BIN digits
      * @param cardBinId               card BIN product identifier
+     * @param cardPoolId              associated card-pool identifier
+     * @param poolName                associated card-pool name
      * @param cardOrganization        card network or organization; see {@link OpenApiEnums.CardOrganization}
      * @param balance                 available shared-account balance
      * @param issuedCardCount         number of cards issued from this account
@@ -73,6 +101,8 @@ public final class SharedAccountModels {
             LocalDateTime createTime,
             String cardBin,
             Long cardBinId,
+            Long cardPoolId,
+            String poolName,
             String cardOrganization,
             BigDecimal balance,
             Long issuedCardCount,
@@ -84,6 +114,31 @@ public final class SharedAccountModels {
             Integer canFreeze,
             Integer canUnfreeze,
             Integer canCancel) {
+        /**
+         * Backward-compatible constructor for the previous response shape.
+         */
+        public SharedAccountResponse(
+                Long memberSharedAccountId,
+                String accountName,
+                String status,
+                LocalDateTime createTime,
+                String cardBin,
+                Long cardBinId,
+                String cardOrganization,
+                BigDecimal balance,
+                Long issuedCardCount,
+                Long remainingApplyCardCount,
+                Integer canRecharge,
+                Integer canApply,
+                BigDecimal applyHandlingFee,
+                Integer canReduce,
+                Integer canFreeze,
+                Integer canUnfreeze,
+                Integer canCancel) {
+            this(memberSharedAccountId, accountName, status, createTime, cardBin, cardBinId,
+                    null, null, cardOrganization, balance, issuedCardCount, remainingApplyCardCount,
+                    canRecharge, canApply, applyHandlingFee, canReduce, canFreeze, canUnfreeze, canCancel);
+        }
     }
 
     /**

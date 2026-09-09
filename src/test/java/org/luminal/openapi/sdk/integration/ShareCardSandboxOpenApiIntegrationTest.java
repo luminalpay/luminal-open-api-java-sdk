@@ -17,6 +17,7 @@ import org.luminal.openapi.sdk.model.AuthModels.OAuth2Token;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupCreateRequest;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupDeleteRequest;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupRequest;
+import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupResponse;
 import org.luminal.openapi.sdk.model.CardGroupModels.CardGroupUpdateRequest;
 import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderCardPageRequest;
 import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderCountryResponse;
@@ -25,7 +26,9 @@ import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderDetailResponse;
 import org.luminal.openapi.sdk.model.CardHolderModels.CardHolderPageRequest;
 import org.luminal.openapi.sdk.model.CardModels.CardBinResponse;
 import org.luminal.openapi.sdk.model.CardModels.CardBinsRequest;
+import org.luminal.openapi.sdk.model.CardModels.CardCvvResponse;
 import org.luminal.openapi.sdk.model.CardModels.CardIdRequest;
+import org.luminal.openapi.sdk.model.CardModels.CardLimitResponse;
 import org.luminal.openapi.sdk.model.CardModels.CardLimitUpdateRequest;
 import org.luminal.openapi.sdk.model.CardModels.CardTransactionsRequest;
 import org.luminal.openapi.sdk.model.CardModels.IssueCardDetailsRequest;
@@ -37,10 +40,13 @@ import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordReque
 import org.luminal.openapi.sdk.model.CardModels.RechargeCardOperationRecordResponse;
 import org.luminal.openapi.sdk.model.CommonModels.PageResult;
 import org.luminal.openapi.sdk.model.CommonModels.PageResultEx;
+import org.luminal.openapi.sdk.model.CardPoolModels.CardPoolRequest;
+import org.luminal.openapi.sdk.model.CardPoolModels.CardPoolResponse;
 import org.luminal.openapi.sdk.model.SharedAccountModels.CreateSharedAccountRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountBalanceRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountGetRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountPageRequest;
+import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountResponse;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountTransactionsRequest;
 import org.luminal.openapi.sdk.model.SharedAccountModels.SharedAccountTransactionResponse;
 import org.luminal.openapi.sdk.model.TransactionModels.WalletTransactionRequest;
@@ -73,6 +79,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,6 +92,7 @@ class ShareCardSandboxOpenApiIntegrationTest {
     private static final String DEFAULT_APP_ID = "lpsha6pj5mwsb7tz";
     private static final String DEFAULT_APP_SECRET = "P11g59PXY33JjqL4CRJ2Oz3nfsjsWRKe";
     private static final String TEST_CARD_BIN = "22346703";
+    private static final String SHARED_CARD_TYPE = "SHARED";
     private static final String DEFAULT_WEBHOOK_HOST = "0.0.0.0";
     private static final int DEFAULT_WEBHOOK_PORT = 18081;
     private static final String DEFAULT_WEBHOOK_PATH = "/luminal-open-api-webhook";
@@ -115,6 +123,7 @@ class ShareCardSandboxOpenApiIntegrationTest {
     private static volatile boolean TOKEN_FLOW_READY;
     private static HttpServer WEBHOOK_SERVER;
     private static CardBinResponse CACHED_CARD_BIN;
+    private static CardPoolResponse CACHED_CARD_POOL;
     private static CardHolderDetailResponse CACHED_CARD_HOLDER_TEMPLATE;
     private static List<CardHolderCountryResponse> CACHED_CARD_HOLDER_COUNTRIES;
     private static Long CACHED_CARD_HOLDER_ID;
@@ -131,9 +140,11 @@ class ShareCardSandboxOpenApiIntegrationTest {
     private static boolean CARD_GROUP_CREATION_ATTEMPTED;
     private static boolean DELETE_CARD_GROUP_CREATION_ATTEMPTED;
     private static boolean CARD_CREATION_ATTEMPTED;
+    private static volatile boolean CARD_POOL_FLOW;
 
     @BeforeAll
     static void startWebhookServer() {
+        resetFlowState();
         int port = configuredLong(
                 "LUMINAL_OPEN_API_WEBHOOK_PORT", "luminal.openApi.webhookPort", (long) DEFAULT_WEBHOOK_PORT).intValue();
         String host = configured("LUMINAL_OPEN_API_WEBHOOK_HOST", "luminal.openApi.webhookHost", DEFAULT_WEBHOOK_HOST);
@@ -152,11 +163,52 @@ class ShareCardSandboxOpenApiIntegrationTest {
         }
     }
 
+    /**
+     * Switches the inherited full flow to card-pool selection. The pool integration subclass calls this from its
+     * {@code @BeforeAll}; the ordinary shared-card test keeps using the fixed BIN above.
+     */
+    static void useCardPoolFlow() {
+        CARD_POOL_FLOW = true;
+    }
+
     @AfterAll
     static void stopWebhookServer() {
         if (WEBHOOK_SERVER != null) {
             WEBHOOK_SERVER.stop(0);
+            WEBHOOK_SERVER = null;
         }
+    }
+
+    private static void resetFlowState() {
+        CARD_OPEN_WEBHOOKS.clear();
+        CARD_STATUS_WEBHOOKS.clear();
+        LIMIT_WEBHOOKS.clear();
+        SHARED_ACCOUNT_OPEN_WEBHOOKS.clear();
+        FUND_TRANSACTION_WEBHOOKS.clear();
+        SETTLEMENT_WEBHOOKS.clear();
+        WEBHOOK_ERROR.set(null);
+        CACHED_TOKEN = null;
+        CARD_OPEN_FAILURE = null;
+        TOKEN_FLOW_READY = false;
+        CACHED_CARD_BIN = null;
+        CACHED_CARD_POOL = null;
+        CACHED_CARD_HOLDER_TEMPLATE = null;
+        CACHED_CARD_HOLDER_COUNTRIES = null;
+        CACHED_CARD_HOLDER_ID = null;
+        CACHED_SHARED_ACCOUNT_ID = null;
+        CACHED_CARD_GROUP_ID = null;
+        CACHED_DELETE_CARD_GROUP_ID = null;
+        CACHED_CARD_TASK_ID = null;
+        CACHED_CARD_ID = null;
+        CACHED_LIMIT_OPERATION_RECORD_ID = null;
+        CACHED_INCREASE_TRANSACTION_ID = null;
+        CACHED_DECREASE_TRANSACTION_ID = null;
+        CACHED_CARD_NAME = null;
+        SHARED_ACCOUNT_CREATION_ATTEMPTED = false;
+        CARD_GROUP_CREATION_ATTEMPTED = false;
+        DELETE_CARD_GROUP_CREATION_ATTEMPTED = false;
+        CARD_CREATION_ATTEMPTED = false;
+        CARD_POOL_FLOW = false;
     }
 
     @Test
@@ -215,6 +267,7 @@ class ShareCardSandboxOpenApiIntegrationTest {
         PageResult<?> result = authorizedClient().transactions().list(
                 new WalletTransactionRequest(1, 20, null, null, null));
         assertNotNull(result);
+        assertNotNull(result.list());
     }
 
     @Test
@@ -227,8 +280,13 @@ class ShareCardSandboxOpenApiIntegrationTest {
     @Order(27)
     void listSharedAccountsFromSandbox() {
         PageResultEx<?, ?> result = authorizedClient().sharedAccounts().list(
-                new SharedAccountPageRequest(1, 20, null, null));
+                new SharedAccountPageRequest(1, 20, null, null, currentCardPoolId()));
         assertNotNull(result);
+        assertNotNull(result.list());
+        assertTrue(result.list().stream().anyMatch(item ->
+                        item instanceof SharedAccountResponse response
+                                && Objects.equals(ensureSharedAccountId(), response.memberSharedAccountId())),
+                "Created shared account was not returned by the account list");
     }
 
     @Test
@@ -238,7 +296,8 @@ class ShareCardSandboxOpenApiIntegrationTest {
         var transaction = authorizedClient().sharedAccounts().increase(
                 new SharedAccountBalanceRequest(accountId, BigDecimal.TEN));
         assertNotNull(transaction);
-        CACHED_INCREASE_TRANSACTION_ID = transaction.sharedAccountTransactionId();
+        CACHED_INCREASE_TRANSACTION_ID = Objects.requireNonNull(
+                transaction.sharedAccountTransactionId(), "Shared-account deposit transaction ID is missing");
         awaitSharedAccountTransaction(CACHED_INCREASE_TRANSACTION_ID, accountId);
     }
 
@@ -250,30 +309,41 @@ class ShareCardSandboxOpenApiIntegrationTest {
         var transaction = authorizedClient().sharedAccounts().decrease(
                 new SharedAccountBalanceRequest(accountId, BigDecimal.ONE));
         assertNotNull(transaction);
-        CACHED_DECREASE_TRANSACTION_ID = transaction.sharedAccountTransactionId();
+        CACHED_DECREASE_TRANSACTION_ID = Objects.requireNonNull(
+                transaction.sharedAccountTransactionId(), "Shared-account withdrawal transaction ID is missing");
         awaitSharedAccountTransaction(CACHED_DECREASE_TRANSACTION_ID, accountId);
     }
 
     @Test
     @Order(27)
     void getSharedAccountDetailsFromSandbox() {
-        assertNotNull(authorizedClient().sharedAccounts().details(new SharedAccountGetRequest(ensureSharedAccountId())));
+        var result = authorizedClient().sharedAccounts().details(new SharedAccountGetRequest(ensureSharedAccountId()));
+        assertNotNull(result);
+        assertEquals(ensureSharedAccountId(), result.memberSharedAccountId());
+        assertEquals(firstCardBinId(), result.cardBinId());
+        if (CARD_POOL_FLOW) {
+            assertEquals(currentCardPoolId(), result.cardPoolId());
+        }
     }
 
     @Test
     @Order(27)
     void listSharedAccountTransactionsFromSandbox() {
         PageResultEx<?, ?> result = authorizedClient().sharedAccounts().transactions(
-                new SharedAccountTransactionsRequest(1, 20, null, null, null, null, null));
+                new SharedAccountTransactionsRequest(1, 20, null, ensureSharedAccountId(), null, null, null));
         assertNotNull(result);
+        assertNotNull(result.list());
     }
 
     @Test
     @Order(27)
     void listCardBinsFromSandbox() {
-        PageResultEx<?, ?> result = authorizedClient().cards().bins(
-                new CardBinsRequest(1, 20, "SHARED", null, null, null));
+        PageResultEx<CardBinResponse, Object> result = authorizedClient().cards().bins(
+                new CardBinsRequest(1, 20, currentCardPoolId(), SHARED_CARD_TYPE, null, TEST_CARD_BIN, null));
         assertNotNull(result);
+        assertNotNull(result.list());
+        assertTrue(result.list().stream().anyMatch(item -> Objects.equals(firstCardBinId(), item.cardBinId())),
+                "Selected shared-card BIN was not returned by the BIN list");
     }
 
     @Test
@@ -310,37 +380,51 @@ class ShareCardSandboxOpenApiIntegrationTest {
             return;
         }
         Long cardId = ensureCardId();
-        assertTrue(authorizedClient().cardHolders().associatedCards(
-                        new CardHolderCardPageRequest(1, 20, cardHolderIdForIssue(), cardId)).list().stream()
+        var result = authorizedClient().cardHolders().associatedCards(
+                new CardHolderCardPageRequest(1, 20, cardHolderIdForIssue(), cardId));
+        assertNotNull(result);
+        assertNotNull(result.list());
+        assertTrue(result.list().stream()
                 .anyMatch(item -> Objects.equals(cardId, item.memberCardId())));
     }
 
     @Test
     @Order(27)
     void listCardsFromSandbox() {
-        PageResultEx<?, ?> result = authorizedClient().cards().list(
-                new MemberCardPageRequest(1, 20, null, null, null, "SHARED", null, null));
+        PageResultEx<MemberCardResponse, Object> result = authorizedClient().cards().list(
+                new MemberCardPageRequest(1, 20, ensureCardId(), null, null, SHARED_CARD_TYPE, null, null));
         assertNotNull(result);
+        assertNotNull(result.list());
+        assertTrue(result.list().stream().anyMatch(item -> Objects.equals(ensureCardId(), item.memberCardId())),
+                "Issued shared card was not returned by the card list");
     }
 
     @Test
     @Order(27)
     void getCardCvvFromSandbox() {
-        assertNotNull(authorizedClient().cards().cvv(new CardIdRequest(ensureCardId())));
+        CardCvvResponse result = authorizedClient().cards().cvv(new CardIdRequest(ensureCardId()));
+        assertNotNull(result);
+        assertEquals(ensureCardId(), result.memberCardId());
+        assertNotNull(result.cardNo());
+        assertNotNull(result.cvv());
+        assertNotNull(result.expiryDate());
     }
 
     @Test
     @Order(27)
     void listCardTransactionsFromSandbox() {
         PageResultEx<?, ?> result = authorizedClient().cards().transactions(
-                new CardTransactionsRequest(1, 20, "SHARED", ensureCardId(), null));
+                new CardTransactionsRequest(1, 20, SHARED_CARD_TYPE, ensureCardId(), null));
         assertNotNull(result);
+        assertNotNull(result.list());
     }
 
     @Test
     @Order(27)
     void getCardLimitFromSandbox() {
-        assertNotNull(authorizedClient().cards().limit(new CardIdRequest(ensureCardId())));
+        CardLimitResponse result = authorizedClient().cards().limit(new CardIdRequest(ensureCardId()));
+        assertNotNull(result);
+        assertEquals(ensureCardId(), result.memberCardId());
     }
 
     @Test
@@ -405,8 +489,11 @@ class ShareCardSandboxOpenApiIntegrationTest {
     @Order(27)
     void getIssueDetailsFromSandbox() {
         ensureCardId();
-        assertNotNull(authorizedClient().cards().issueDetails(new IssueCardDetailsRequest(
-                issueCardTaskId())));
+        List<IssueCardDetailsResponse> result = authorizedClient().cards().issueDetails(
+                new IssueCardDetailsRequest(issueCardTaskId()));
+        assertNotNull(result);
+        assertTrue(result.stream().anyMatch(item -> Objects.equals(ensureCardId(), item.memberCardId())),
+                "Issued card was not returned by issue details");
     }
 
     @Test
@@ -414,6 +501,11 @@ class ShareCardSandboxOpenApiIntegrationTest {
     void listCardGroupsFromSandbox() {
         PageResultEx<?, ?> result = authorizedClient().cardGroups().list(new CardGroupRequest(1, 20, "SHARED"));
         assertNotNull(result);
+        assertNotNull(result.list());
+        assertTrue(result.list().stream().anyMatch(item ->
+                        item instanceof CardGroupResponse response
+                                && Objects.equals(ensureCardGroupId(), response.cardGroupId())),
+                "Created shared-card group was not returned by the group list");
     }
 
     @Test
@@ -481,13 +573,29 @@ class ShareCardSandboxOpenApiIntegrationTest {
 
     private static synchronized CardBinResponse firstCardBin() {
         if (CACHED_CARD_BIN == null) {
-            PageResultEx<CardBinResponse, Object> bins = authorizedClient().cards().bins(
-                    new CardBinsRequest(1, 20, "SHARED", null, TEST_CARD_BIN, null));
+            PageResultEx<CardBinResponse, Object> bins;
+            if (CARD_POOL_FLOW) {
+                Long selectedPoolId = Objects.requireNonNull(selectedCardPool().cardPoolId(),
+                        "Selected card pool ID is missing");
+                bins = authorizedClient().cards().bins(new CardBinsRequest(
+                        1, 20, selectedPoolId, SHARED_CARD_TYPE, null, TEST_CARD_BIN, null));
+            } else {
+                bins = authorizedClient().cards().bins(
+                        new CardBinsRequest(1, 20, null, SHARED_CARD_TYPE, null, TEST_CARD_BIN, null));
+            }
             assertNotNull(bins);
+            assertNotNull(bins.list());
+            assertFalse(bins.list().isEmpty(), "No shared-card BIN was returned by Sandbox");
+            String expectedCardBin = TEST_CARD_BIN;
             CACHED_CARD_BIN = bins.list().stream()
-                    .filter(item -> TEST_CARD_BIN.equals(item.cardBin()))
+                    .filter(Objects::nonNull)
+                    .filter(item -> SHARED_CARD_TYPE.equalsIgnoreCase(item.cardType()))
+                    .filter(item -> expectedCardBin == null || expectedCardBin.equals(item.cardBin()))
+                    .filter(item -> !CARD_POOL_FLOW || item.cardPoolId() == null
+                            || Objects.equals(currentCardPoolId(), item.cardPoolId()))
                     .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("Card BIN not found: " + TEST_CARD_BIN));
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No matching shared-card BIN was returned by Sandbox: " + expectedCardBin));
         }
         return CACHED_CARD_BIN;
     }
@@ -508,13 +616,73 @@ class ShareCardSandboxOpenApiIntegrationTest {
     }
 
     private static Long createSharedAccountAndReturnId(String name) {
-        var created = authorizedClient().sharedAccounts().create(
-                new CreateSharedAccountRequest(firstCardBinId(), new BigDecimal("100"), name));
+        CreateSharedAccountRequest request = CARD_POOL_FLOW
+                ? new CreateSharedAccountRequest(null, currentCardPoolId(), sharedAccountAmount(), name)
+                : new CreateSharedAccountRequest(firstCardBinId(), sharedAccountAmount(), name);
+        var created = authorizedClient().sharedAccounts().create(request);
         assertNotNull(created);
         Long accountId = Objects.requireNonNull(created.memberSharedAccountId(), "Created shared account ID is missing");
         CACHED_SHARED_ACCOUNT_ID = accountId;
         awaitSharedAccountOpenStatus(accountId);
         return accountId;
+    }
+
+    /**
+     * Creates an additional shared account with both selectors, leaving the original pool-only flow account cached
+     * for the inherited tests.
+     */
+    static synchronized Long createSharedAccountWithCardBinAndCardPool() {
+        Long cardPoolId = Objects.requireNonNull(currentCardPoolId(), "Card pool ID is missing");
+        CardBinResponse cardBin = queryCardBinBelongingToPool(cardPoolId);
+        Long cardBinId = Objects.requireNonNull(cardBin.cardBinId(), "Card BIN ID is missing");
+        var created = authorizedClient().sharedAccounts().create(new CreateSharedAccountRequest(
+                cardBinId, cardPoolId, sharedAccountAmount(), uniqueName("sdk-sandbox-sa-bin-pool")));
+        assertNotNull(created);
+        Long accountId = Objects.requireNonNull(created.memberSharedAccountId(), "Created shared account ID is missing");
+        awaitSharedAccountOpenStatus(accountId);
+        return accountId;
+    }
+
+    private static CardBinResponse queryCardBinBelongingToPool(Long cardPoolId) {
+        PageResultEx<CardBinResponse, Object> bins = authorizedClient().cards().bins(new CardBinsRequest(
+                1, 20, cardPoolId, SHARED_CARD_TYPE, null, TEST_CARD_BIN, null));
+        assertNotNull(bins);
+        assertNotNull(bins.list());
+        assertFalse(bins.list().isEmpty(), "No shared-card BIN was returned by Sandbox");
+        return bins.list().stream()
+                .filter(Objects::nonNull)
+                .filter(item -> SHARED_CARD_TYPE.equalsIgnoreCase(item.cardType()))
+                .filter(item -> TEST_CARD_BIN.equals(item.cardBin()))
+                .filter(item -> Objects.equals(cardPoolId, item.cardPoolId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No shared-card BIN belonging to card pool was returned by Sandbox: " + cardPoolId));
+    }
+
+    static synchronized CardPoolResponse selectedCardPool() {
+        if (!CARD_POOL_FLOW) {
+            return null;
+        }
+        if (CACHED_CARD_POOL == null) {
+            List<CardPoolResponse> pools = authorizedClient().cardPools().list(new CardPoolRequest(null, null));
+            assertNotNull(pools);
+            assertFalse(pools.isEmpty(), "No available card pool was returned by Sandbox");
+            CACHED_CARD_POOL = pools.stream()
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No available card pool was returned by Sandbox"));
+            Objects.requireNonNull(CACHED_CARD_POOL.cardPoolId(), "Selected card pool ID is missing");
+        }
+        return CACHED_CARD_POOL;
+    }
+
+    private static Long currentCardPoolId() {
+        return CARD_POOL_FLOW ? Objects.requireNonNull(selectedCardPool().cardPoolId(), "Card pool ID is missing") : null;
+    }
+
+    private static BigDecimal sharedAccountAmount() {
+        return new BigDecimal("100.00");
     }
 
     private static void awaitSharedAccountOpenStatus(Long accountId) {
@@ -711,18 +879,19 @@ class ShareCardSandboxOpenApiIntegrationTest {
             var privateKey = RsaSignatures.readPrivateKey(readPrivateKeyPem());
             CardBinResponse cardBin = firstCardBin();
             Long cardHolderId = supportsCustomCardholder(cardBin) ? cardHolderIdForIssue() : null;
-            CACHED_CARD_TASK_ID = Objects.requireNonNull(authorizedClient().cards().issue(
-                    new IssueCardRequest(
-                            1,
-                            firstCardBinId(),
-                            ensureCardGroupId(),
-                            CACHED_CARD_NAME,
-                            "SHARED",
-                            ensureSharedAccountId(),
-                            null,
-                            BigDecimal.ONE,
-                            BigDecimal.ONE,
-                            cardHolderId), privateKey), "Card issue task ID is missing");
+            IssueCardRequest request = new IssueCardRequest(
+                    1,
+                    firstCardBinId(),
+                    ensureCardGroupId(),
+                    CACHED_CARD_NAME,
+                    "SHARED",
+                    ensureSharedAccountId(),
+                    null,
+                    BigDecimal.ONE,
+                    BigDecimal.ONE,
+                    cardHolderId);
+            CACHED_CARD_TASK_ID = Objects.requireNonNull(
+                    authorizedClient().cards().issue(request, privateKey), "Card issue task ID is missing");
         }
         return CACHED_CARD_TASK_ID;
     }
@@ -946,7 +1115,10 @@ class ShareCardSandboxOpenApiIntegrationTest {
                     respond(exchange, 400);
                     return;
                 }
-                if (isTerminalTransactionPayload(payload)) {
+                if (!isCurrentSharedAccountFund(payload)) {
+                    LOGGER.info("Ignoring shared-account fund webhook for transactionId={} accountId={} cardType={}",
+                            payload.sharedAccountTransactionId(), payload.memberSharedAccountId(), payload.cardType());
+                } else if (isTerminalTransactionPayload(payload)) {
                     FUND_TRANSACTION_WEBHOOKS.computeIfAbsent(payload.sharedAccountTransactionId(),
                             ignored -> new CompletableFuture<>()).complete(payload);
                 } else {
@@ -1004,10 +1176,19 @@ class ShareCardSandboxOpenApiIntegrationTest {
         }
         Long operationRecordId = payload.memberCardOperationRecordId();
         return "SHARED".equalsIgnoreCase(payload.cardType())
-                && (Objects.equals(CACHED_LIMIT_OPERATION_RECORD_ID, operationRecordId)
-                || LIMIT_WEBHOOKS.containsKey(operationRecordId))
+                && Objects.equals(CACHED_LIMIT_OPERATION_RECORD_ID, operationRecordId)
                 && "MODIFY_LIMITS".equalsIgnoreCase(payload.operationType())
                 && isFinalStatus(payload.status());
+    }
+
+    private static boolean isCurrentSharedAccountFund(TransactionWebhook payload) {
+        if (payload == null || payload.sharedAccountTransactionId() == null
+                || payload.sharedAccountTransactionId().isBlank()
+                || !SHARED_CARD_TYPE.equalsIgnoreCase(payload.cardType())) {
+            return false;
+        }
+        Long accountId = parseLong(payload.memberSharedAccountId());
+        return CACHED_SHARED_ACCOUNT_ID != null && Objects.equals(CACHED_SHARED_ACCOUNT_ID, accountId);
     }
 
     private static Long parseLong(String value) {
@@ -1074,6 +1255,7 @@ class ShareCardSandboxOpenApiIntegrationTest {
     }
 
     private static void awaitCardStatus(Long cardId, String expectedStatus) {
+        failOnWebhookError();
         CompletableFuture<CardStatusWebhook> webhookFuture = CARD_STATUS_WEBHOOKS.computeIfAbsent(
                 cardId, ignored -> new CompletableFuture<>());
         String status = null;
@@ -1189,6 +1371,7 @@ class ShareCardSandboxOpenApiIntegrationTest {
     }
 
     private static void awaitSharedAccountTransaction(String transactionId, Long accountId) {
+        failOnWebhookError();
         if (transactionId == null || transactionId.isBlank()) {
             throw new IllegalStateException("Shared-account transaction ID is missing");
         }
